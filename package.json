@@ -1,0 +1,30 @@
+{
+  "name": "landen",
+  "version": "1.0.0",
+  "description": "Familie-app: welke landen heb je bezocht? Wereldkaart, XP en ranglijst.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codelab423/Landen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codelab423/Landen/issues"
+  },
+  "homepage": "https://github.com/codelab423/Landen#readme",
+  "dependencies": {
+    "compression": "^1.8.2",
+    "d3": "^7.9.0",
+    "express": "^4.22.3",
+    "flag-icons": "^7.5.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}
