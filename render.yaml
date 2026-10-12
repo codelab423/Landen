@@ -1,0 +1,17 @@
+# Render Blueprint — free web service. The data lives in a free Neon Postgres
+# database (DATABASE_URL), because Render's free disk is wiped on every restart.
+services:
+  - type: web
+    name: landen
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: FAMILY_CODE
+        sync: false
