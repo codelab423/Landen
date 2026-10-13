@@ -97,14 +97,19 @@ const cleanName = (s) => (typeof s === 'string' ? s.trim().slice(0, 40) : '');
 // Express 4 does not catch rejected promises; route them to the error handler.
 const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// Very small brute-force guard for login/register.
-const attempts = new Map();
-function rateLimited(key) {
+// Small brute-force guard: only *failed* attempts count. Logins are keyed per email
+// address, because a whole family at home shares one IP address.
+const FAIL_WINDOW = 15 * 60 * 1000;
+const failures = new Map();
+function recentFailures(key) {
   const t = Date.now();
-  const list = (attempts.get(key) || []).filter((x) => t - x < 15 * 60 * 1000);
-  list.push(t);
-  attempts.set(key, list);
-  return list.length > 20;
+  const list = (failures.get(key) || []).filter((x) => t - x < FAIL_WINDOW);
+  if (list.length) failures.set(key, list);
+  else failures.delete(key);
+  return list.length;
+}
+function recordFailure(key) {
+  failures.set(key, [...(failures.get(key) || []), Date.now()]);
 }
 
 // ---------- app ----------
@@ -141,13 +146,16 @@ app.get(
 app.post(
   '/api/register',
   h(async (req, res) => {
-    if (rateLimited('reg:' + req.ip)) return bad(res, 429, 'too_many_attempts');
+    if (recentFailures('code:' + req.ip) >= 30) return bad(res, 429, 'too_many_attempts');
     const { email, password, name, familyCode, lang } = req.body || {};
     const mail = String(email || '').trim().toLowerCase();
     if (!isEmail(mail)) return bad(res, 400, 'invalid_email');
     if (typeof password !== 'string' || password.length < 8) return bad(res, 400, 'password_too_short');
     if (!cleanName(name)) return bad(res, 400, 'name_required');
-    if (FAMILY_CODE && familyCode !== FAMILY_CODE) return bad(res, 403, 'wrong_family_code');
+    if (FAMILY_CODE && familyCode !== FAMILY_CODE) {
+      recordFailure('code:' + req.ip);
+      return bad(res, 403, 'wrong_family_code');
+    }
     if (await db.get('SELECT 1 AS x FROM users WHERE email = ?', [mail])) return bad(res, 409, 'email_taken');
 
     const count = await userCount();
@@ -166,11 +174,12 @@ app.post(
 app.post(
   '/api/login',
   h(async (req, res) => {
-    if (rateLimited('login:' + req.ip)) return bad(res, 429, 'too_many_attempts');
     const { email, password } = req.body || {};
     const mail = String(email || '').trim().toLowerCase();
+    if (recentFailures('login:' + mail) >= 10) return bad(res, 429, 'too_many_attempts');
     const user = await db.get('SELECT * FROM users WHERE email = ?', [mail]);
     if (!user || typeof password !== 'string' || !checkPassword(password, user.password_hash)) {
+      recordFailure('login:' + mail);
       return bad(res, 401, 'wrong_credentials');
     }
     await createSession(req, res, user.id);
