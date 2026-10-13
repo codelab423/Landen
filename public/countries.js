@@ -260,6 +260,9 @@
   // Map shapes without an ISO id that belong to one of the 195.
   var EXTRA_SHAPES = { 'N. Cyprus': 'CY', Somaliland: 'SO' };
 
+  // Everyone in the family lives here, so it always counts as visited.
+  var HOME = 'NL';
+
   function xpFor(codes) {
     return codes.reduce(function (sum, code) {
       var c = BY_CODE[code];
@@ -282,6 +285,7 @@
     BY_CODE: BY_CODE,
     BY_ID: BY_ID,
     EXTRA_SHAPES: EXTRA_SHAPES,
+    HOME: HOME,
     MAX_XP: xpFor(Object.keys(BY_CODE)),
     xpFor: xpFor,
     levelFor: levelFor,

@@ -2,7 +2,7 @@
   'use strict';
 
   const L = window.LANDEN;
-  const PRESET_COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0f766e', '#000000'];
+  const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
   const VIEWS = ['map', 'list', 'wish', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
@@ -543,7 +543,8 @@
     const c = L.BY_CODE[code];
     const v = viewed();
     const row = v.map.get(code);
-    let status = row ? row.status : null;
+    const home = code === L.HOME;
+    let status = home ? 'visited' : row ? row.status : null;
 
     if (v.readOnly) {
       openModal(`
@@ -557,20 +558,31 @@
 
     const m = openModal(`
       <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
-      <div class="choice">
+      ${
+        home
+          ? `<div class="hint">🏠 ${t('homeCountry')}</div>`
+          : `<div class="choice">
         <button class="btn" data-status="visited">✅ ${t('visited')}<small>+${c.xp} XP</small></button>
         <button class="btn" data-status="wish">⭐ ${t('wish')}<small>${t('navWish')}</small></button>
-      </div>
+      </div>`
+      }
       <label class="field"><span>${t('year')}</span><input name="year" type="number" min="1900" max="2100" inputmode="numeric" value="${row && row.year ? row.year : ''}"></label>
       <label class="field"><span>${t('note')}</span><textarea name="note" rows="3" maxlength="500" placeholder="${t('notePlaceholder')}">${row && row.note ? esc(row.note) : ''}</textarea></label>
       <div class="error" id="c-error"></div>
       <div class="modal-foot">
-        ${row ? `<button class="btn danger" id="c-remove">${t('remove')}</button>` : '<span></span>'}
+        ${row && !home ? `<button class="btn danger" id="c-remove">${t('remove')}</button>` : '<span></span>'}
         <div style="display:flex;gap:8px"><button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="c-save">${t('save')}</button></div>
       </div>`);
 
     const btns = m.querySelectorAll('[data-status]');
-    const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+    const save = m.querySelector('#c-save');
+    const hint = m.querySelector('#c-error');
+    // Nothing chosen and nothing stored yet → there is nothing to save.
+    const paint = () => {
+      btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+      save.disabled = !status && !row;
+      hint.textContent = save.disabled ? t('pickStatus') : '';
+    };
     paint();
     btns.forEach((b) =>
       b.addEventListener('click', () => {
@@ -665,6 +677,8 @@
       ${
         readOnly
           ? ''
+          : c.code === L.HOME
+          ? `<div class="actions"><span class="icon-btn on-visited" title="${t('homeCountry')}">🏠</span></div>`
           : `<div class="actions">
         <button class="icon-btn ${st === 'visited' ? 'on-visited' : ''}" data-toggle="visited" data-code="${c.code}" title="${t('visited')}">✓</button>
         <button class="icon-btn ${st === 'wish' ? 'on-wish' : ''}" data-toggle="wish" data-code="${c.code}" title="${t('wish')}">★</button>
