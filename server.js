@@ -13,7 +13,8 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const FAMILY_CODE = process.env.FAMILY_CODE || '';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const SESSION_DAYS = 60;
-const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5'];
+const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7'];
+const OLD_DEFAULT_RED = '#e11d48';
 
 let db; // set in start()
 
@@ -58,6 +59,13 @@ async function createSession(req, res, userId) {
 function publicUser(u) {
   return { id: u.id, email: u.email, name: u.name, color: u.color, lang: u.lang, isAdmin: !!u.is_admin };
 }
+
+// The home country is always visited (insert, or upgrade a wishlist entry).
+const HOME_UPSERT = `INSERT INTO countries (user_id, code, status, year, note, updated_at)
+  SELECT id, ?, 'visited', NULL, NULL, ? FROM users WHERE id = ? OR ? = 1
+  ON CONFLICT (user_id, code) DO UPDATE SET status = 'visited'`;
+const markHomeVisited = (userId) => db.run(HOME_UPSERT, [L.HOME, now(), userId, 0]);
+const markHomeVisitedForEveryone = () => db.run(HOME_UPSERT, [L.HOME, now(), 0, 1]);
 
 const getUser = (id) => db.get('SELECT * FROM users WHERE id = ?', [id]);
 const userCount = async () => Number((await db.get('SELECT COUNT(*) AS n FROM users')).n);
@@ -149,6 +157,7 @@ app.post(
       'INSERT INTO users (email, name, password_hash, color, lang, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
       [mail, cleanName(name), hashPassword(password), color, lang === 'en' ? 'en' : 'nl', isAdmin, now()]
     );
+    await markHomeVisited(row.id);
     await createSession(req, res, row.id);
     res.json({ user: publicUser(await getUser(row.id)) });
   })
@@ -219,6 +228,7 @@ app.put(
     if (!L.BY_CODE[code]) return bad(res, 404, 'unknown_country');
     const { status, year, note } = req.body || {};
     if (status !== 'visited' && status !== 'wish') return bad(res, 400, 'invalid_status');
+    if (code === L.HOME && status !== 'visited') return bad(res, 400, 'home_country');
     const y = year === null || year === undefined || year === '' ? null : Number(year);
     if (y !== null && !(Number.isInteger(y) && y >= 1900 && y <= 2100)) return bad(res, 400, 'invalid_year');
     const n = typeof note === 'string' ? note.trim().slice(0, 500) : null;
@@ -235,7 +245,9 @@ app.delete(
   '/api/me/countries/:code',
   requireUser,
   h(async (req, res) => {
-    await db.run('DELETE FROM countries WHERE user_id = ? AND code = ?', [req.user.id, String(req.params.code).toUpperCase()]);
+    const code = String(req.params.code).toUpperCase();
+    if (code === L.HOME) return bad(res, 400, 'home_country');
+    await db.run('DELETE FROM countries WHERE user_id = ? AND code = ?', [req.user.id, code]);
     res.json({ countries: await countriesOf(req.user.id) });
   })
 );
@@ -329,6 +341,9 @@ app.use((err, req, res, next) => {
 
 async function start() {
   db = await database.open({ databaseUrl: DATABASE_URL, dataDir: DATA_DIR });
+  await markHomeVisitedForEveryone();
+  // Red was the first auto-assigned colour and nobody liked it; move those accounts to the new default.
+  await db.run('UPDATE users SET color = ? WHERE color = ?', [COLORS[0], OLD_DEFAULT_RED]);
   // Clean expired sessions once in a while.
   setInterval(() => db.run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]).catch(() => {}), 3600 * 1000).unref();
   app.listen(PORT, () => {
