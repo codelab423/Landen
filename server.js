@@ -70,19 +70,35 @@ const markHomeVisitedForEveryone = () => db.run(HOME_UPSERT, [L.HOME, now(), 0, 
 const getUser = (id) => db.get('SELECT * FROM users WHERE id = ?', [id]);
 const userCount = async () => Number((await db.get('SELECT COUNT(*) AS n FROM users')).n);
 
+const toRow = (r) => ({ code: r.code, status: r.status, year: r.year, note: r.note, updatedAt: r.updated_at });
+
 async function countriesOf(userId) {
   const rows = await db.all('SELECT code, status, year, note, updated_at FROM countries WHERE user_id = ? ORDER BY updated_at DESC, code', [userId]);
-  return rows.map((r) => ({ code: r.code, status: r.status, year: r.year, note: r.note, updatedAt: r.updated_at }));
+  return rows.map(toRow);
+}
+
+// Everyone's countries in one query (the database may be far away, so avoid one query per person).
+async function countriesByUser() {
+  const rows = await db.all('SELECT user_id, code, status, year, note, updated_at FROM countries ORDER BY updated_at DESC, code');
+  const byUser = new Map();
+  rows.forEach((r) => {
+    const id = Number(r.user_id);
+    if (!byUser.has(id)) byUser.set(id, []);
+    byUser.get(id).push(toRow(r));
+  });
+  return byUser;
 }
 
 function statsOf(rows) {
   const visited = rows.filter((r) => r.status === 'visited').map((r) => r.code);
+  const wish = rows.filter((r) => r.status === 'wish').length;
   const xp = L.xpFor(visited);
   return {
     visited: visited.length,
-    wish: rows.filter((r) => r.status === 'wish').length,
+    wish,
     xp,
     level: L.levelFor(xp).index,
+    badges: L.badgesFor(visited, wish).filter((b) => b.done).length,
   };
 }
 
@@ -267,10 +283,29 @@ app.get(
   requireUser,
   h(async (req, res) => {
     const users = await db.all('SELECT id, name, color FROM users ORDER BY id');
-    const board = [];
-    for (const u of users) board.push({ id: u.id, name: u.name, color: u.color, ...statsOf(await countriesOf(u.id)) });
+    const byUser = await countriesByUser();
+    const board = users.map((u) => ({ id: u.id, name: u.name, color: u.color, ...statsOf(byUser.get(u.id) || []) }));
     board.sort((a, b) => b.xp - a.xp || b.visited - a.visited);
     res.json({ board });
+  })
+);
+
+// Family map: how many family members visited each country. Only the host also sees who.
+app.get(
+  '/api/family',
+  requireUser,
+  h(async (req, res) => {
+    const users = await db.all('SELECT id, name, color FROM users ORDER BY id');
+    const rows = await db.all("SELECT user_id, code FROM countries WHERE status = 'visited'");
+    const counts = {};
+    const who = {};
+    rows.forEach((r) => {
+      counts[r.code] = (counts[r.code] || 0) + 1;
+      (who[r.code] = who[r.code] || []).push(Number(r.user_id));
+    });
+    const out = { members: users.length, counts };
+    if (req.user.is_admin) Object.assign(out, { who, users: users.map((u) => ({ id: u.id, name: u.name, color: u.color })) });
+    res.json(out);
   })
 );
 
@@ -281,12 +316,13 @@ app.get(
   requireAdmin,
   h(async (req, res) => {
     const users = await db.all('SELECT * FROM users ORDER BY id');
-    const out = [];
-    for (const u of users) {
-      const rows = await countriesOf(u.id);
-      out.push({ ...publicUser(u), createdAt: u.created_at, ...statsOf(rows), countries: rows });
-    }
-    res.json({ users: out });
+    const byUser = await countriesByUser();
+    res.json({
+      users: users.map((u) => {
+        const rows = byUser.get(u.id) || [];
+        return { ...publicUser(u), createdAt: u.created_at, ...statsOf(rows), countries: rows };
+      }),
+    });
   })
 );
 

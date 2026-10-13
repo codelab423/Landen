@@ -783,6 +783,56 @@ h2 {
   padding: 30px 10px;
 }
 
+/* ---------- badges ---------- */
+
+.badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.badge {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.badge .badge-icon {
+  font-size: 40px;
+  line-height: 1.1;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.badge.done .badge-icon {
+  filter: none;
+  opacity: 1;
+}
+
+.badge.done {
+  outline: 2px solid var(--brand-2);
+}
+
+.badge small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge .bar {
+  width: 100%;
+}
+
+.badge .pill {
+  margin: 4px 0 0;
+}
+
 /* ---------- leaderboard ---------- */
 
 .lb-row {
