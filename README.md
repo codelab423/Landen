@@ -46,33 +46,48 @@ npm start
 | Variabele | Wat | Standaard |
 | --- | --- | --- |
 | `PORT` | Poort van de webserver | `3000` |
-| `DATA_DIR` | Map waar de database (`landen.db`) staat | `./data` |
+| `DATABASE_URL` | Postgres-verbinding (bv. van Neon). Als dit leeg is, gebruikt de app een lokaal SQLite-bestand. | *(leeg)* |
+| `DATA_DIR` | Map voor het SQLite-bestand (`landen.db`), alleen zonder `DATABASE_URL` | `./data` |
 | `FAMILY_CODE` | Geheime code die nodig is om een account te maken. **Zet dit aan** als de site online staat, anders kan iedereen met de link zich aanmelden. | *(uit)* |
 | `ADMIN_EMAIL` | Dit e-mailadres wordt bij aanmelden automatisch host | *(leeg)* |
 
-## Online zetten (hosting)
+## Gratis online zetten: Render + Neon
 
-De app is één Node.js-server met een SQLite-database in één bestand. Belangrijk: de host moet een
-**blijvende schijf (volume)** hebben, anders ben je de data kwijt bij een herstart.
+Render draait de website gratis, Neon bewaart de data gratis (Render's gratis schijf wordt bij elke herstart gewist,
+daarom staat de data in Neon).
 
-**Railway** (makkelijkst)
-1. Maak een project → *Deploy from GitHub repo* → kies deze repo.
-2. Voeg een **Volume** toe, mount path `/data`.
-3. Variables: `DATA_DIR=/data` en `FAMILY_CODE=<jullie code>`.
-4. Onder *Networking* → *Generate domain*. Klaar.
+**1. Database maken bij Neon**
+1. Ga naar [neon.com](https://neon.com) en maak een gratis account (inloggen met GitHub kan).
+2. Maak een project, regio **Europe (Frankfurt)**.
+3. Klik op **Connect** en kopieer de *connection string* (begint met `postgresql://…`).
 
-**Fly.io / eigen server / NAS** — er zit een `Dockerfile` bij:
+**2. Website op Render**
+1. Ga naar [render.com](https://render.com) en log in met GitHub.
+2. **New → Blueprint** → kies de repo `Landen`. Render leest `render.yaml` en maakt een gratis web service.
+3. Vul in als erom gevraagd wordt:
+   - `DATABASE_URL` = de connection string van Neon
+   - `FAMILY_CODE` = jullie geheime familiecode
+4. Klik **Apply**. Na een paar minuten krijg je een link zoals `https://landen-xxxx.onrender.com`.
+5. Open de link en **maak als eerste je eigen account** — dan ben jij de host.
+
+**Goed om te weten**
+- Op het gratis plan valt de website na 15 minuten zonder bezoekers in slaap. De eerstvolgende bezoeker wacht
+  dan ongeveer een minuut. Wil je dat niet: maak een gratis taak op [cron-job.org](https://cron-job.org) die elke
+  10 minuten `https://<jouw-link>/healthz` opent. Het gratis plan heeft 750 uur per maand, genoeg om 24/7 aan te staan.
+- Nieuwe versies van de code (push naar `main`) worden automatisch online gezet.
+
+## Zelf hosten (eigen pc, NAS, Raspberry Pi)
+
+Zonder `DATABASE_URL` slaat de app alles op in één SQLite-bestand. Er zit een `Dockerfile` bij:
 
 ```bash
 docker build -t landen .
 docker run -d -p 3000:3000 -v landen-data:/data -e FAMILY_CODE=geheim landen
 ```
 
-> Let op: Render's gratis plan heeft géén blijvende schijf — daar verdwijnt de data.
-
-**Backup**: kopieer gewoon `landen.db` uit de data-map.
+**Backup**: kopieer `landen.db` uit de data-map (of maak een backup in Neon).
 
 ## Techniek
 
-- Backend: Express + `node:sqlite` (ingebouwd in Node), scrypt-wachtwoorden, sessie-cookies (HttpOnly).
+- Backend: Express + Postgres (`pg`) of `node:sqlite`, scrypt-wachtwoorden, sessie-cookies (HttpOnly).
 - Frontend: geen build-stap; vanilla JS + d3 (kaart) + topojson + world-atlas + flag-icons.

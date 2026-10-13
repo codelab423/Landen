@@ -20,6 +20,7 @@
     "d3": "^7.9.0",
     "express": "^4.22.3",
     "flag-icons": "^7.5.0",
+    "pg": "^8.23.1",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },
