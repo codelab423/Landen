@@ -3,7 +3,7 @@
 
   const L = window.LANDEN;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
-  const VIEWS = ['map', 'list', 'wish', 'badges', 'ranking', 'admin'];
+  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'ideas', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
   const $toasts = document.getElementById('toasts');
@@ -18,6 +18,10 @@
     adminUsers: null,
     mapMode: 'mine',
     family: null, // /api/family result for the family map
+    settings: { hiddenWidgets: [], aiEnabled: true, aiAvailable: false, widgets: [] },
+    ideasTab: 'ideas',
+    aiChat: [],
+    aiBusy: false,
     filters: { q: '', tier: '', continent: '', status: '' },
     authMode: 'login',
   };
@@ -105,8 +109,8 @@
 
   function currentView() {
     const v = location.hash.replace('#/', '');
-    if (v === 'admin' && !(state.me && state.me.isAdmin)) return 'map';
-    return VIEWS.includes(v) ? v : 'map';
+    if (v === 'admin' && !(state.me && state.me.isAdmin)) return 'dash';
+    return VIEWS.includes(v) ? v : 'dash';
   }
 
   window.addEventListener('hashchange', render);
@@ -129,7 +133,16 @@
     }
   }
 
+  async function loadSettings() {
+    try {
+      state.settings = await api('GET', '/api/settings');
+    } catch (e) {
+      /* keep defaults */
+    }
+  }
+
   function onLoggedIn(data) {
+    loadSettings();
     state.me = data.user;
     if (data.user.lang && !storedLang()) state.lang = data.user.lang;
     setMine(data.countries);
@@ -157,7 +170,7 @@
     $app.innerHTML = shell(view) + '<main id="main"></main>';
     bindShell();
     const main = document.getElementById('main');
-    ({ map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, ranking: renderRanking, admin: renderAdmin })[view](main);
+    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
   }
 
   function langToggle() {
@@ -233,16 +246,18 @@
   function shell(view) {
     const s = statsFor(state.mine);
     const links = [
+      ['dash', '📊 ' + t('navDash')],
       ['map', '🗺️ ' + t('navMap')],
       ['list', '🏆 ' + t('navList')],
       ['wish', '⭐ ' + t('navWish')],
       ['badges', '🏅 ' + t('navBadges')],
+      ['ideas', '💡 ' + t('navIdeas')],
       ['ranking', '👨‍👩‍👧‍👦 ' + t('navRanking')],
     ];
     if (state.me.isAdmin) links.push(['admin', '👑 ' + t('navAdmin')]);
     return `
       <header class="topbar"><div class="topbar-inner">
-        <div class="logo">🌍 ${t('appName')}</div>
+        <div class="logo"><span>🌍</span><span class="logo-text">${t('appName')}</span></div>
         <nav class="nav">${links.map(([k, label]) => `<a href="#/${k}" class="${k === view ? 'active' : ''}">${label}</a>`).join('')}</nav>
         <div class="top-right">
           <span class="pill" title="${t('xp')}">Lv ${s.lvl.index} · ${num(s.xp)} XP</span>
@@ -881,6 +896,524 @@
         </div>`
         )
         .join('')}</div>`;
+  }
+
+  // ---------- small render helpers ----------
+
+  const chip = (code) => `<button class="chip" data-open="${code}">${flag(code, 'sm')}${cname(L.BY_CODE[code])}</button>`;
+
+  function userById(users, id) {
+    return users.find((u) => u.id === id) || { name: '?', color: '#94a3b8' };
+  }
+
+  function avatars(users, ids, max) {
+    const shown = ids.slice(0, max || 5);
+    const extra = ids.length - shown.length;
+    return `<span class="avatars">${shown
+      .map((id) => {
+        const u = userById(users, id);
+        return `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+      })
+      .join('')}${extra > 0 ? `<span class="avatar xs more">+${extra}</span>` : ''}</span>`;
+  }
+
+  function names(users, ids) {
+    return ids.map((id) => esc(userById(users, id).name)).join(', ');
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const d = new Date(iso.replace(' ', 'T') + 'Z');
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (days <= 0) return t('today');
+    if (days === 1) return t('yesterday');
+    if (days < 30) return t('daysAgo', { n: days });
+    return d.toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  // Tiny, safe Markdown: escape everything first, then add headings, bold, lists and line breaks.
+  function md(text) {
+    const lines = esc(text).split('\n');
+    let html = '';
+    let list = null;
+    const close = () => {
+      if (list) html += `</${list}>`;
+      list = null;
+    };
+    const inline = (s) => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>');
+    lines.forEach((line) => {
+      let m;
+      if ((m = line.match(/^\s*#{1,6}\s+(.*)$/))) {
+        close();
+        html += `<h4>${inline(m[1])}</h4>`;
+      } else if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) {
+        if (list !== 'ul') {
+          close();
+          html += '<ul>';
+          list = 'ul';
+        }
+        html += `<li>${inline(m[1])}</li>`;
+      } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+        if (list !== 'ol') {
+          close();
+          html += '<ol>';
+          list = 'ol';
+        }
+        html += `<li>${inline(m[1])}</li>`;
+      } else if (!line.trim()) {
+        close();
+      } else {
+        close();
+        html += `<p>${inline(line)}</p>`;
+      }
+    });
+    close();
+    return html;
+  }
+
+  function countryOptions(selected) {
+    return L.COUNTRIES.slice()
+      .sort((a, b) => cname(a).localeCompare(cname(b), state.lang))
+      .map((c) => `<option value="${c.code}" ${c.code === selected ? 'selected' : ''}>${cname(c)}</option>`)
+      .join('');
+  }
+
+  // ---------- dashboard ----------
+
+  const WIDGET_ICONS = {
+    stats: '📈',
+    never: '🧭',
+    wanted: '😍',
+    everyone: '🤝',
+    popular: '🔥',
+    unique: '🦄',
+    ask: '💬',
+    rarest: '💎',
+    continents: '🌐',
+    recent: '🕒',
+  };
+
+  async function renderDashboard(main) {
+    const s = statsFor(state.mine);
+    const lv = s.lvl;
+    const pct = lv.next ? Math.round(((s.xp - lv.level.xp) / (lv.next.xp - lv.level.xp)) * 100) : 100;
+    main.innerHTML = `
+      <section class="hero">
+        <div class="hero-text">
+          <h1>${t('hello', { name: esc(state.me.name) })} 👋</h1>
+          <p>${t('heroLine', { n: s.visited.length, level: lv.level[state.lang] })}</p>
+          <div class="hero-bar"><i style="width:${pct}%"></i></div>
+          <small>${lv.next ? t('nextLevel', { n: num(lv.next.xp - s.xp), name: lv.next[state.lang] }) : t('maxLevel')}</small>
+        </div>
+        <div class="hero-actions">
+          <a class="btn glass" href="#/map">🗺️ ${t('navMap')}</a>
+          <a class="btn glass" href="#/ideas">💡 ${t('navIdeas')}</a>
+          ${state.me.isAdmin ? `<button class="btn glass" id="dash-manage">⚙️ ${t('manageDash')}</button>` : ''}
+        </div>
+      </section>
+      <div class="widgets" id="widgets"><div class="empty">…</div></div>`;
+    const manage = document.getElementById('dash-manage');
+    if (manage) manage.onclick = openDashSettings;
+
+    let d;
+    try {
+      d = await api('GET', '/api/dashboard');
+    } catch (e) {
+      document.getElementById('widgets').innerHTML = `<div class="empty">${errText(e)}</div>`;
+      return;
+    }
+    if (currentView() !== 'dash') return;
+    const hidden = new Set(d.hiddenWidgets || []);
+    const order = ['stats', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
+    const el = document.getElementById('widgets');
+    el.innerHTML = order
+      .filter((k) => !hidden.has(k))
+      .map((k) => {
+        const body = WIDGETS[k](d);
+        return `<article class="widget w-${k}"><header><span class="w-icon">${WIDGET_ICONS[k]}</span><div><h3>${t('w_' + k)}</h3><small>${t('w_' + k + '_sub')}</small></div></header>${body}</article>`;
+      })
+      .join('');
+    el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+  }
+
+  const WIDGETS = {
+    stats(d) {
+      const s = d.stats;
+      const cell = (v, label) => `<div class="mini"><b>${v}</b><small>${label}</small></div>`;
+      return `<div class="minis">
+        ${cell(s.members, t('members'))}
+        ${cell(`${s.countries}<span>/195</span>`, t('countries'))}
+        ${cell(Math.round((s.countries / 195) * 100) + '%', t('ofWorld'))}
+        ${cell(num(s.xp), t('xpTogether'))}
+        ${cell('🏅 ' + s.badges, t('navBadges'))}
+        ${cell('⭐ ' + s.wishes, t('dreamCountries'))}
+      </div>`;
+    },
+    never(d) {
+      const easy = d.never.slice(0, 12);
+      return `<p class="big-number">${d.never.length}<small> ${t('countries')}</small></p>
+        <p class="w-hint">${t('easiestFirst')}</p>
+        <div class="chips">${easy.map(chip).join('')}${d.never.length > easy.length ? `<span class="chip ghost">+${d.never.length - easy.length}</span>` : ''}</div>`;
+    },
+    wanted(d) {
+      if (!d.wanted.length) return `<p class="w-empty">${t('w_wanted_empty')}</p>`;
+      return `<ol class="rank-list">${d.wanted
+        .map((w) => `<li>${chip(w.code)}<span class="spacer"></span>${avatars(d.users, w.users)}<b>${w.users.length}×</b></li>`)
+        .join('')}</ol>`;
+    },
+    everyone(d) {
+      if (!d.everyone.length) return `<p class="w-empty">${t('w_everyone_empty')}</p>`;
+      return `<div class="chips">${d.everyone.map(chip).join('')}</div>`;
+    },
+    popular(d) {
+      if (!d.popular.length) return `<p class="w-empty">${t('w_popular_empty')}</p>`;
+      const n = d.stats.members || 1;
+      return `<ol class="rank-list">${d.popular
+        .map(
+          (p) => `<li>${chip(p.code)}<span class="spacer"></span>
+            <span class="mini-bar"><i style="width:${Math.round((p.users.length / n) * 100)}%"></i></span><b>${p.users.length}/${n}</b></li>`
+        )
+        .join('')}</ol>`;
+    },
+    unique(d) {
+      if (!d.unique.length) return `<p class="w-empty">${t('w_unique_empty')}</p>`;
+      return d.unique
+        .map((u) => {
+          const who = userById(d.users, u.user);
+          return `<div class="who-row"><span class="avatar xs" style="background:${esc(who.color)}">${esc(initials(who.name))}</span><b>${esc(who.name)}</b>
+            <div class="chips">${u.codes.slice(0, 8).map(chip).join('')}${u.codes.length > 8 ? `<span class="chip ghost">+${u.codes.length - 8}</span>` : ''}</div></div>`;
+        })
+        .join('');
+    },
+    ask(d) {
+      if (!d.ask.length) return `<p class="w-empty">${t('w_ask_empty')}</p>`;
+      return `<ul class="ask-list">${d.ask
+        .map(
+          (a) =>
+            `<li><b>${esc(userById(d.users, a.user).name)}</b> ${t('wantsTo')} ${chip(a.code)} → ${t('askTo')} <b>${names(d.users, a.experts)}</b></li>`
+        )
+        .join('')}</ul>`;
+    },
+    rarest(d) {
+      if (!d.rarest.length) return `<p class="w-empty">${t('w_rarest_empty')}</p>`;
+      return `<ol class="rank-list">${d.rarest
+        .map((r) => `<li>${chip(r.code)}${tierBadge(L.BY_CODE[r.code].tier)}<span class="spacer"></span>${avatars(d.users, r.users)}</li>`)
+        .join('')}</ol>`;
+    },
+    continents(d) {
+      return d.continents
+        .map(
+          (c) => `<div class="cont-row"><span>${L.CONTINENTS[c.key][state.lang]}</span>
+            <span class="mini-bar wide"><i style="width:${Math.round((c.done / c.total) * 100)}%"></i></span><b>${c.done}/${c.total}</b></div>`
+        )
+        .join('');
+    },
+    recent(d) {
+      if (!d.recent.length) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
+      return `<ul class="feed">${d.recent
+        .map((r) => {
+          const u = userById(d.users, r.user);
+          return `<li><span class="avatar xs" style="background:${esc(u.color)}">${esc(initials(u.name))}</span>
+            <span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${L.BY_CODE[r.code].xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+        })
+        .join('')}</ul>`;
+    },
+  };
+
+  function openDashSettings() {
+    const st = state.settings;
+    const hidden = new Set(st.hiddenWidgets || []);
+    const m = openModal(`
+      <div class="modal-head"><span style="font-size:36px">⚙️</span><div><h3>${t('manageDash')}</h3><small>${t('manageDashSub')}</small></div></div>
+      <div class="check-list">${(st.widgets || Object.keys(WIDGETS))
+        .map(
+          (k) => `<label class="check"><input type="checkbox" data-w="${k}" ${hidden.has(k) ? '' : 'checked'}> ${WIDGET_ICONS[k]} ${t('w_' + k)}</label>`
+        )
+        .join('')}</div>
+      <h4 style="margin:16px 0 6px">🤖 ${t('aiTitle')}</h4>
+      <label class="check"><input type="checkbox" id="ai-on" ${st.aiEnabled !== false ? 'checked' : ''} ${st.aiAvailable ? '' : 'disabled'}> ${t('aiToggle')}</label>
+      ${st.aiAvailable ? '' : `<p class="hint">${t('aiNoKey')}</p>`}
+      <div class="error" id="ds-error"></div>
+      <div class="modal-foot"><span></span><div style="display:flex;gap:8px"><button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="ds-save">${t('save')}</button></div></div>`);
+    m.querySelector('#ds-save').onclick = async () => {
+      const hiddenWidgets = [...m.querySelectorAll('[data-w]')].filter((c) => !c.checked).map((c) => c.dataset.w);
+      try {
+        const s = await api('PUT', '/api/admin/settings', { hiddenWidgets, aiEnabled: m.querySelector('#ai-on').checked });
+        Object.assign(state.settings, s);
+        closeModal();
+        toast(t('saved'));
+        render();
+      } catch (e) {
+        m.querySelector('#ds-error').textContent = errText(e);
+      }
+    };
+  }
+
+  // ---------- ideas, plans & AI ----------
+
+  function renderIdeas(main) {
+    const tab = state.ideasTab;
+    main.innerHTML = `
+      <div class="page-head">
+        <div><h2>💡 ${t('ideasTitle')}</h2><p class="sub">${t('ideasSub')}</p></div>
+        <div class="seg big">
+          <button data-tab="ideas" class="${tab === 'ideas' ? 'on' : ''}">💡 ${t('tabIdeas')}</button>
+          <button data-tab="plans" class="${tab === 'plans' ? 'on' : ''}">🗓️ ${t('tabPlans')}</button>
+          <button data-tab="ai" class="${tab === 'ai' ? 'on' : ''}">🤖 ${t('tabAi')}</button>
+        </div>
+      </div>
+      <div id="ideas-body"></div>`;
+    main.querySelectorAll('[data-tab]').forEach(
+      (b) =>
+        (b.onclick = () => {
+          state.ideasTab = b.dataset.tab;
+          renderIdeas(main);
+        })
+    );
+    const body = document.getElementById('ideas-body');
+    ({ ideas: renderIdeaBoard, plans: renderPlans, ai: renderAi })[tab](body);
+  }
+
+  async function renderIdeaBoard(body) {
+    body.innerHTML = `
+      <form class="card composer" id="idea-form">
+        <textarea name="text" rows="2" maxlength="500" placeholder="${t('ideaPlaceholder')}" required></textarea>
+        <div class="composer-row">
+          <select name="country"><option value="">🌍 ${t('ideaCountry')}</option>${countryOptions('')}</select>
+          <button class="btn primary" type="submit">${t('share')}</button>
+        </div>
+      </form>
+      <div id="idea-list" class="idea-list"><div class="empty">…</div></div>`;
+    const list = document.getElementById('idea-list');
+    const draw = (ideas) => {
+      if (currentView() !== 'ideas' || !document.getElementById('idea-list')) return;
+      list.innerHTML = ideas.length
+        ? ideas
+            .map(
+              (i) => `<article class="idea">
+          <button class="vote ${i.mine ? 'on' : ''}" data-vote="${i.id}" title="${t('vote')}">👍<b>${i.votes}</b></button>
+          <div class="idea-body">
+            <p>${esc(i.text)}</p>
+            <footer>
+              <span class="avatar xs" style="background:${esc(i.color)}">${esc(initials(i.name))}</span>
+              <span>${esc(i.name)} · ${timeAgo(i.createdAt)}</span>
+              ${i.country ? chip(i.country) : ''}
+              ${i.user === state.me.id || state.me.isAdmin ? `<button class="linkish danger" data-del-idea="${i.id}">${t('remove')}</button>` : ''}
+            </footer>
+          </div>
+        </article>`
+            )
+            .join('')
+        : `<div class="card empty">${t('ideasEmpty')}</div>`;
+      list.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+      list.querySelectorAll('[data-vote]').forEach((b) => (b.onclick = async () => draw((await api('POST', `/api/ideas/${b.dataset.vote}/vote`)).ideas)));
+      list.querySelectorAll('[data-del-idea]').forEach(
+        (b) =>
+          (b.onclick = async () => {
+            if (!confirm(t('confirmRemove'))) return;
+            draw((await api('DELETE', `/api/ideas/${b.dataset.delIdea}`)).ideas);
+          })
+      );
+    };
+    document.getElementById('idea-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target));
+      try {
+        draw((await api('POST', '/api/ideas', fd)).ideas);
+        ev.target.reset();
+        toast('💡 ' + t('ideaShared'));
+      } catch (e) {
+        toast(errText(e));
+      }
+    };
+    try {
+      draw((await api('GET', '/api/ideas')).ideas);
+    } catch (e) {
+      list.innerHTML = `<div class="empty">${errText(e)}</div>`;
+    }
+  }
+
+  async function renderPlans(body) {
+    body.innerHTML = `
+      <details class="card composer" id="plan-new">
+        <summary><b>➕ ${t('newPlan')}</b></summary>
+        <form id="plan-form">
+          <label class="field"><span>${t('planTitle')}</span><input name="title" maxlength="120" required placeholder="${t('planTitlePh')}"></label>
+          <label class="field"><span>${t('planCountry')}</span><select name="country"><option value="">—</option>${countryOptions('')}</select></label>
+          <label class="field"><span>${t('planBody')}</span><textarea name="body" rows="7" required placeholder="${t('planBodyPh')}"></textarea></label>
+          <button class="btn primary" type="submit">${t('save')}</button>
+        </form>
+      </details>
+      <div id="plan-list" class="plan-list"><div class="empty">…</div></div>`;
+    const list = document.getElementById('plan-list');
+    const draw = (plans) => {
+      if (!document.getElementById('plan-list')) return;
+      list.innerHTML = plans.length
+        ? plans
+            .map(
+              (p) => `<details class="plan card">
+          <summary>
+            <div class="plan-head">
+              <h3>${esc(p.title)}</h3>
+              <small><span class="avatar xs" style="background:${esc(p.color)}">${esc(initials(p.name))}</span> ${esc(p.name)} · ${timeAgo(p.createdAt)}</small>
+            </div>
+            <div class="chips">${p.countries.map(chip).join('')}</div>
+          </summary>
+          <div class="md">${md(p.body)}</div>
+          ${p.user === state.me.id || state.me.isAdmin ? `<button class="btn small danger" data-del-plan="${p.id}">${t('remove')}</button>` : ''}
+        </details>`
+            )
+            .join('')
+        : `<div class="card empty">${t('plansEmpty')}</div>`;
+      list.querySelectorAll('[data-open]').forEach(
+        (b) =>
+          (b.onclick = (e) => {
+            e.preventDefault();
+            openCountry(b.dataset.open);
+          })
+      );
+      list.querySelectorAll('[data-del-plan]').forEach(
+        (b) =>
+          (b.onclick = async () => {
+            if (!confirm(t('confirmRemove'))) return;
+            draw((await api('DELETE', `/api/plans/${b.dataset.delPlan}`)).plans);
+          })
+      );
+    };
+    document.getElementById('plan-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const fd = Object.fromEntries(new FormData(ev.target));
+      try {
+        draw((await api('POST', '/api/plans', { title: fd.title, body: fd.body, countries: fd.country ? [fd.country] : [] })).plans);
+        ev.target.reset();
+        document.getElementById('plan-new').open = false;
+        toast('🗓️ ' + t('planSaved'));
+      } catch (e) {
+        toast(errText(e));
+      }
+    };
+    try {
+      draw((await api('GET', '/api/plans')).plans);
+    } catch (e) {
+      list.innerHTML = `<div class="empty">${errText(e)}</div>`;
+    }
+  }
+
+  function renderAi(body) {
+    const st = state.settings;
+    if (!st.aiAvailable || st.aiEnabled === false) {
+      body.innerHTML = `<div class="card ai-off"><div style="font-size:48px">🤖</div><h3>${t('aiOffTitle')}</h3>
+        <p class="sub">${st.aiAvailable ? t('aiDisabled') : state.me.isAdmin ? t('aiNoKeyAdmin') : t('aiNoKeyMember')}</p></div>`;
+      return;
+    }
+    const suggestions = [t('aiSug1'), t('aiSug2'), t('aiSug3'), t('aiSug4')];
+    body.innerHTML = `
+      <div class="card chat">
+        <div class="chat-log" id="chat-log"></div>
+        <div class="chat-sugs" id="chat-sugs">${suggestions.map((s) => `<button class="chip" data-sug="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+        <form class="chat-input" id="chat-form">
+          <textarea name="q" rows="1" maxlength="2000" placeholder="${t('aiPlaceholder')}"></textarea>
+          <button class="btn primary" type="submit" id="chat-send">➤</button>
+        </form>
+        <div class="chat-foot"><small>${t('aiFoot')}</small>${state.aiChat.length ? `<button class="linkish" id="chat-clear">${t('aiClear')}</button>` : ''}</div>
+      </div>`;
+    const log = document.getElementById('chat-log');
+    const draw = () => {
+      log.innerHTML = state.aiChat.length
+        ? state.aiChat
+            .map((m, i) =>
+              m.role === 'user'
+                ? `<div class="msg me"><div class="bubble">${esc(m.content)}</div></div>`
+                : `<div class="msg ai"><span class="ai-face">🤖</span><div class="bubble md">${md(m.content)}
+                    <div class="msg-actions"><button class="linkish" data-save-plan="${i}">🗓️ ${t('saveAsPlan')}</button><button class="linkish" data-share-idea="${i}">💡 ${t('shareAsIdea')}</button></div></div></div>`
+            )
+            .join('') + (state.aiBusy ? `<div class="msg ai"><span class="ai-face">🤖</span><div class="bubble typing"><i></i><i></i><i></i></div></div>` : '')
+        : `<div class="chat-hello"><div style="font-size:44px">🤖</div><p>${t('aiHello', { name: esc(state.me.name) })}</p></div>`;
+      log.scrollTop = log.scrollHeight;
+      document.getElementById('chat-sugs').hidden = state.aiChat.length > 0;
+      log.querySelectorAll('[data-save-plan]').forEach((b) => (b.onclick = () => saveReplyAsPlan(Number(b.dataset.savePlan))));
+      log.querySelectorAll('[data-share-idea]').forEach((b) => (b.onclick = () => shareReplyAsIdea(Number(b.dataset.shareIdea))));
+    };
+    const send = async (q) => {
+      q = q.trim();
+      if (!q || state.aiBusy) return;
+      state.aiChat.push({ role: 'user', content: q });
+      state.aiBusy = true;
+      draw();
+      try {
+        const r = await api('POST', '/api/ai/chat', { messages: state.aiChat });
+        state.aiChat.push({ role: 'assistant', content: r.reply });
+      } catch (e) {
+        state.aiChat.pop();
+        toast(errText(e));
+      }
+      state.aiBusy = false;
+      if (currentView() === 'ideas' && state.ideasTab === 'ai' && document.getElementById('chat-log')) renderAi(body);
+    };
+    const form = document.getElementById('chat-form');
+    const ta = form.querySelector('textarea');
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const q = ta.value;
+      ta.value = '';
+      send(q);
+    };
+    body.querySelectorAll('[data-sug]').forEach((b) => (b.onclick = () => send(b.dataset.sug)));
+    const clear = document.getElementById('chat-clear');
+    if (clear)
+      clear.onclick = () => {
+        state.aiChat = [];
+        renderAi(body);
+      };
+    draw();
+  }
+
+  // The question that led to an AI answer makes a good plan title.
+  function questionBefore(i) {
+    for (let j = i - 1; j >= 0; j--) if (state.aiChat[j].role === 'user') return state.aiChat[j].content;
+    return t('tabAi');
+  }
+
+  function mentionedCountries(text) {
+    const lower = text.toLowerCase();
+    return L.COUNTRIES.filter((c) => lower.includes(c.nl.toLowerCase()) || lower.includes(c.en.toLowerCase()))
+      .map((c) => c.code)
+      .filter((c) => c !== L.HOME)
+      .slice(0, 8);
+  }
+
+  async function saveReplyAsPlan(i) {
+    const reply = state.aiChat[i].content;
+    const title = prompt(t('planTitle'), questionBefore(i).slice(0, 80));
+    if (!title) return;
+    try {
+      await api('POST', '/api/plans', { title, body: reply, countries: mentionedCountries(reply) });
+      toast('🗓️ ' + t('planSaved'));
+    } catch (e) {
+      toast(errText(e));
+    }
+  }
+
+  async function shareReplyAsIdea(i) {
+    const reply = state.aiChat[i].content;
+    const first = reply
+      .split('\n')
+      .map((l) => l.replace(/[#*\-•]/g, '').trim())
+      .find((l) => l.length > 10);
+    const text = prompt(t('ideaPlaceholder'), (first || questionBefore(i)).slice(0, 200));
+    if (!text) return;
+    try {
+      await api('POST', '/api/ideas', { text, country: mentionedCountries(reply)[0] || '' });
+      toast('💡 ' + t('ideaShared'));
+    } catch (e) {
+      toast(errText(e));
+    }
   }
 
   // ---------- leaderboard ----------

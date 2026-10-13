@@ -361,6 +361,10 @@ app.delete(
   })
 );
 
+// Dashboard, ideas, plans and the family AI.
+const family = require('./family.js').register(app, { getDb: () => db, h, requireUser, requireAdmin, bad, now });
+require('./ai.js').register(app, { h, requireUser, bad, family });
+
 app.get('/healthz', (req, res) => res.send('ok'));
 
 // ---------- static ----------
@@ -393,6 +397,7 @@ async function start() {
   setInterval(() => db.run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]).catch(() => {}), 3600 * 1000).unref();
   app.listen(PORT, () => {
     console.log(`Landen draait op http://localhost:${PORT} (database: ${db.kind})`);
+    console.log(`Familie-AI: ${process.env.ANTHROPIC_API_KEY ? 'aan' : 'uit (geen ANTHROPIC_API_KEY)'}`);
     if (!FAMILY_CODE) console.log('Let op: geen FAMILY_CODE ingesteld — iedereen met de link kan een account maken.');
   });
 }

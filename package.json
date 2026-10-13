@@ -16,6 +16,7 @@
   },
   "homepage": "https://github.com/codelab423/Landen#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "compression": "^1.8.2",
     "d3": "^7.9.0",
     "express": "^4.22.3",
