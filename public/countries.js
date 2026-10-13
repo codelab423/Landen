@@ -277,6 +277,91 @@
     return { index: idx + 1, level: LEVELS[idx], next: next };
   }
 
+  // ---------- badges ----------
+  // Each badge counts how many of something you have (`have`) against a target (`need`).
+
+  function inSet(codes) {
+    return function (v) {
+      return codes.filter(function (c) {
+        return v.set[c];
+      }).length;
+    };
+  }
+  function ofTier(tier) {
+    return function (v) {
+      return v.list.filter(function (c) {
+        return BY_CODE[c] && BY_CODE[c].tier === tier;
+      }).length;
+    };
+  }
+  function continentDone(k) {
+    return function (v) {
+      return v.list.filter(function (c) {
+        return BY_CODE[c] && BY_CODE[c].continent === k;
+      }).length;
+    };
+  }
+  function continentSize(k) {
+    return COUNTRIES.filter(function (c) {
+      return c.continent === k;
+    }).length;
+  }
+  var total = function (v) {
+    return v.list.length;
+  };
+
+  var BADGES = [
+    { id: 'first', icon: '✈️', need: 1, have: function (v) { return v.list.filter(function (c) { return c !== HOME; }).length; },
+      nl: 'Eerste reis', en: 'First trip', dnl: 'Een land buiten Nederland', den: 'A country outside the Netherlands' },
+    { id: 'neighbours', icon: '🤝', need: 2, have: inSet(['BE', 'DE']),
+      nl: 'Goede buren', en: 'Good neighbours', dnl: 'België en Duitsland', den: 'Belgium and Germany' },
+    { id: 'benelux', icon: '🧇', need: 3, have: inSet(['BE', 'NL', 'LU']),
+      nl: 'Benelux', en: 'Benelux', dnl: 'België, Nederland en Luxemburg', den: 'Belgium, the Netherlands and Luxembourg' },
+    { id: 'c10', icon: '🧳', need: 10, have: total, nl: '10 landen', en: '10 countries', dnl: 'Bezoek 10 landen', den: 'Visit 10 countries' },
+    { id: 'c25', icon: '🌍', need: 25, have: total, nl: '25 landen', en: '25 countries', dnl: 'Bezoek 25 landen', den: 'Visit 25 countries' },
+    { id: 'c50', icon: '🗺️', need: 50, have: total, nl: '50 landen', en: '50 countries', dnl: 'Bezoek 50 landen', den: 'Visit 50 countries' },
+    { id: 'c100', icon: '💯', need: 100, have: total, nl: '100 landen', en: '100 countries', dnl: 'Bezoek 100 landen', den: 'Visit 100 countries' },
+    { id: 'cont3', icon: '🧭', need: 3,
+      have: function (v) { var s = {}; v.list.forEach(function (c) { if (BY_CODE[c]) s[BY_CODE[c].continent] = 1; }); return Object.keys(s).length; },
+      nl: 'Drie werelddelen', en: 'Three continents', dnl: 'Landen in 3 werelddelen', den: 'Countries on 3 continents' },
+    { id: 'cont6', icon: '🌐', need: 6,
+      have: function (v) { var s = {}; v.list.forEach(function (c) { if (BY_CODE[c]) s[BY_CODE[c].continent] = 1; }); return Object.keys(s).length; },
+      nl: 'Alle werelddelen', en: 'Every continent', dnl: 'Landen in alle 6 werelddelen', den: 'Countries on all 6 continents' },
+    { id: 'nordic', icon: '❄️', need: 5, have: inSet(['DK', 'NO', 'SE', 'FI', 'IS']),
+      nl: 'Noorderlicht', en: 'Northern lights', dnl: 'Alle Noordse landen', den: 'All Nordic countries' },
+    { id: 'micro', icon: '🔬', need: 5, have: inSet(['VA', 'MC', 'SM', 'LI', 'AD']),
+      nl: 'Mini-landen', en: 'Microstates', dnl: 'Vaticaan, Monaco, San Marino, Liechtenstein, Andorra', den: 'Vatican, Monaco, San Marino, Liechtenstein, Andorra' },
+    { id: 'g7', icon: '💼', need: 7, have: inSet(['US', 'CA', 'GB', 'FR', 'DE', 'IT', 'JP']),
+      nl: 'G7', en: 'G7', dnl: 'Alle G7-landen', den: 'All G7 countries' },
+    { id: 'daredevil', icon: '🔥', need: 5, have: ofTier(4),
+      nl: 'Durfal', en: 'Daredevil', dnl: '5 landen uit Tier 4', den: '5 Tier 4 countries' },
+    { id: 'legend1', icon: '🐉', need: 1, have: ofTier(5),
+      nl: 'Legendarisch', en: 'Legendary', dnl: 'Je eerste Tier 5-land', den: 'Your first Tier 5 country' },
+    { id: 'legend5', icon: '👑', need: 5, have: ofTier(5),
+      nl: 'Echte legende', en: 'True legend', dnl: '5 landen uit Tier 5', den: '5 Tier 5 countries' },
+    { id: 'dreamer', icon: '⭐', need: 5, have: function (v) { return v.wish; },
+      nl: 'Dromer', en: 'Dreamer', dnl: '5 landen op je wensenlijst', den: '5 countries on your wishlist' },
+    { id: 'EU', icon: '🏰', need: continentSize('EU'), have: continentDone('EU'), nl: 'Heel Europa', en: 'All of Europe', dnl: 'Alle landen van Europa', den: 'Every country in Europe' },
+    { id: 'AS', icon: '🏯', need: continentSize('AS'), have: continentDone('AS'), nl: 'Heel Azië', en: 'All of Asia', dnl: 'Alle landen van Azië', den: 'Every country in Asia' },
+    { id: 'AF', icon: '🦁', need: continentSize('AF'), have: continentDone('AF'), nl: 'Heel Afrika', en: 'All of Africa', dnl: 'Alle landen van Afrika', den: 'Every country in Africa' },
+    { id: 'NA', icon: '🗽', need: continentSize('NA'), have: continentDone('NA'), nl: 'Heel Noord-Amerika', en: 'All of North America', dnl: 'Alle landen van Noord-Amerika', den: 'Every country in North America' },
+    { id: 'SA', icon: '🦙', need: continentSize('SA'), have: continentDone('SA'), nl: 'Heel Zuid-Amerika', en: 'All of South America', dnl: 'Alle landen van Zuid-Amerika', den: 'Every country in South America' },
+    { id: 'OC', icon: '🏝️', need: continentSize('OC'), have: continentDone('OC'), nl: 'Heel Oceanië', en: 'All of Oceania', dnl: 'Alle landen van Oceanië', den: 'Every country in Oceania' },
+  ];
+
+  // visited: array of country codes; wish: number of wishlist entries.
+  function badgesFor(visited, wish) {
+    var set = {};
+    visited.forEach(function (c) {
+      set[c] = 1;
+    });
+    var v = { list: visited, set: set, wish: wish || 0 };
+    return BADGES.map(function (b) {
+      var have = Math.min(b.have(v), b.need);
+      return { id: b.id, icon: b.icon, nl: b.nl, en: b.en, dnl: b.dnl, den: b.den, have: have, need: b.need, done: have >= b.need };
+    });
+  }
+
   var api = {
     TIERS: TIERS,
     CONTINENTS: CONTINENTS,
@@ -289,6 +374,8 @@
     MAX_XP: xpFor(Object.keys(BY_CODE)),
     xpFor: xpFor,
     levelFor: levelFor,
+    BADGES: BADGES,
+    badgesFor: badgesFor,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

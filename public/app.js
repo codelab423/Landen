@@ -3,7 +3,7 @@
 
   const L = window.LANDEN;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
-  const VIEWS = ['map', 'list', 'wish', 'ranking', 'admin'];
+  const VIEWS = ['map', 'list', 'wish', 'badges', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
   const $toasts = document.getElementById('toasts');
@@ -17,6 +17,7 @@
     viewingId: null, // admin: whose map is shown (null = own)
     adminUsers: null,
     mapMode: 'mine',
+    family: null, // /api/family result for the family map
     filters: { q: '', tier: '', continent: '', status: '' },
     authMode: 'login',
   };
@@ -88,7 +89,7 @@
     let wish = 0;
     map.forEach((r, code) => (r.status === 'visited' ? visited.push(code) : wish++));
     const xp = L.xpFor(visited);
-    return { visited, wish, xp, lvl: L.levelFor(xp) };
+    return { visited, wish, xp, lvl: L.levelFor(xp), badges: L.badgesFor(visited, wish) };
   }
 
   // The country data currently shown on the map / lists (own, or someone else's for the host).
@@ -156,7 +157,7 @@
     $app.innerHTML = shell(view) + '<main id="main"></main>';
     bindShell();
     const main = document.getElementById('main');
-    ({ map: renderMap, list: renderList, wish: renderWish, ranking: renderRanking, admin: renderAdmin })[view](main);
+    ({ map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, ranking: renderRanking, admin: renderAdmin })[view](main);
   }
 
   function langToggle() {
@@ -235,6 +236,7 @@
       ['map', '🗺️ ' + t('navMap')],
       ['list', '🏆 ' + t('navList')],
       ['wish', '⭐ ' + t('navWish')],
+      ['badges', '🏅 ' + t('navBadges')],
       ['ranking', '👨‍👩‍👧‍👦 ' + t('navRanking')],
     ];
     if (state.me.isAdmin) links.push(['admin', '👑 ' + t('navAdmin')]);
@@ -270,9 +272,9 @@
         <div class="value">${lv.level[state.lang]}</div>
         <div class="bar"><i style="width:${pct}%"></i></div>
         <div class="extra">${lv.next ? t('nextLevel', { n: num(lv.next.xp - s.xp), name: lv.next[state.lang] }) : t('maxLevel')}</div></div>
-      <div class="stat"><div class="label">${t('navWish')}</div>
-        <div class="value">⭐ ${s.wish}</div>
-        <div class="extra">${t('countries')}</div></div>
+      <div class="stat"><div class="label">${t('navBadges')}</div>
+        <div class="value">🏅 ${s.badges.filter((b) => b.done).length} <small style="font-size:14px;color:var(--muted)">/ ${s.badges.length}</small></div>
+        <div class="extra">⭐ ${s.wish} ${t('onWishlist')}</div></div>
     </div>`;
   }
 
@@ -291,7 +293,9 @@
           <div class="seg">
             <button data-mode="mine" class="${state.mapMode === 'mine' ? 'on' : ''}">${t('mapMine')}</button>
             <button data-mode="tier" class="${state.mapMode === 'tier' ? 'on' : ''}">${t('mapTiers')}</button>
+            <button data-mode="family" class="${state.mapMode === 'family' ? 'on' : ''}">${t('mapFamily')}</button>
           </div>
+          <button class="btn small" id="surprise" title="${t('surpriseHint')}">🎲 ${t('surprise')}</button>
           <span class="spacer"></span>
           ${
             canPick
@@ -319,9 +323,12 @@
       b.addEventListener('click', () => {
         state.mapMode = b.dataset.mode;
         main.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
+        if (state.mapMode === 'family') loadFamily().then(paintMap);
         paintMap();
       })
     );
+    document.getElementById('surprise').onclick = surprise;
+    if (state.mapMode === 'family') loadFamily().then(paintMap);
     const sel = document.getElementById('map-user');
     if (sel)
       sel.onchange = () => {
@@ -474,9 +481,39 @@
     else s.call(mapState.zoom.transform, d3.zoomIdentity);
   }
 
+  async function loadFamily() {
+    try {
+      state.family = await api('GET', '/api/family');
+    } catch (e) {
+      /* keep the old data */
+    }
+  }
+
+  // "Surprise me": a random country you haven't been to yet, wishlist countries twice as likely.
+  function surprise() {
+    const pool = [];
+    L.COUNTRIES.forEach((c) => {
+      const row = state.mine.get(c.code);
+      if (row && row.status === 'visited') return;
+      pool.push(c.code);
+      if (row) pool.push(c.code);
+    });
+    if (!pool.length) return toast('🌍 ' + t('seenItAll'));
+    const code = pool[Math.floor(Math.random() * pool.length)];
+    state.viewingId = null;
+    toast('🎲 ' + t('surpriseToast', { country: cname(L.BY_CODE[code]) }));
+    openCountry(code);
+  }
+
   function fillFor(code, map, color) {
     const row = map.get(code);
     const c = L.BY_CODE[code];
+    if (state.mapMode === 'family') {
+      const f = state.family;
+      const n = f ? f.counts[code] || 0 : 0;
+      if (!n) return { fill: 'var(--land)', opacity: 1 };
+      return { fill: 'var(--brand-2)', opacity: 0.25 + 0.75 * (n / Math.max(1, f.members)) };
+    }
     if (state.mapMode === 'tier') return { fill: L.TIERS[c.tier].color, opacity: row && row.status === 'visited' ? 1 : 0.32 };
     if (!row) return { fill: 'var(--land)', opacity: 1 };
     if (row.status === 'visited') return { fill: color, opacity: 1 };
@@ -505,7 +542,13 @@
 
     const legend = document.getElementById('legend');
     if (!legend) return;
-    if (state.mapMode === 'tier') {
+    if (state.mapMode === 'family') {
+      const m = state.family ? state.family.members : 0;
+      legend.innerHTML = `<span>${t('familyLegend')}</span>
+        <span><i class="swatch" style="background:var(--brand-2);opacity:0.4"></i>${t('familyFew')}</span>
+        <span><i class="swatch" style="background:var(--brand-2)"></i>${t('familyAll', { n: m })}</span>
+        <span><i class="swatch" style="background:var(--land)"></i>${t('familyNone')}</span>`;
+    } else if (state.mapMode === 'tier') {
       legend.innerHTML = [1, 2, 3, 4, 5]
         .map((n) => `<span><i class="swatch" style="background:${L.TIERS[n].color}"></i>${t('tier')} ${n} · ${L.TIERS[n][state.lang]} · ${L.TIERS[n].xp} XP</span>`)
         .join('');
@@ -520,7 +563,15 @@
 
   function showTooltip(ev, c) {
     const row = viewed().map.get(c.code);
-    const status = row ? (row.status === 'visited' ? '✅ ' + t('visited') + (row.year ? ' (' + row.year + ')' : '') : '⭐ ' + t('wish')) : t('notVisited');
+    let status = row ? (row.status === 'visited' ? '✅ ' + t('visited') + (row.year ? ' (' + row.year + ')' : '') : '⭐ ' + t('wish')) : t('notVisited');
+    const f = state.family;
+    if (state.mapMode === 'family' && f) {
+      status = '👨‍👩‍👧‍👦 ' + t('familyCount', { n: f.counts[c.code] || 0, m: f.members });
+      if (f.who && f.who[c.code]) {
+        const names = f.who[c.code].map((id) => (f.users.find((u) => u.id === id) || {}).name).filter(Boolean);
+        status += '<br>' + names.map(esc).join(', ');
+      }
+    }
     $tooltip.innerHTML = `<b>${cname(c)}</b>${tierBadge(c.tier)} <strong>${c.xp} XP</strong><div style="margin-top:4px;color:var(--muted)">${status}</div>`;
     $tooltip.hidden = false;
     const pad = 14;
@@ -622,6 +673,11 @@
     if (status === 'visited' && !wasVisited) toast('🎉 ' + t('xpGained', { xp: c.xp, country: cname(c) }), 'xp');
     else toast(status ? t('saved') : t('removed'));
     if (after.lvl.index > before.lvl.index) setTimeout(() => toast(t('levelUp', { name: after.lvl.level[state.lang] }), 'level'), 500);
+    const had = new Set(before.badges.filter((b) => b.done).map((b) => b.id));
+    after.badges
+      .filter((b) => b.done && !had.has(b.id))
+      .forEach((b, i) => setTimeout(() => toast(`${b.icon} ${t('badgeUnlocked', { name: b[state.lang] })}`, 'level'), 1200 + i * 900));
+    if (state.family) loadFamily().then(() => currentView() === 'map' && paintMap());
     if (state.me.isAdmin) loadAdminUsers();
     refreshAfterChange();
   }
@@ -803,6 +859,30 @@
     bindRows(main);
   }
 
+  // ---------- badges ----------
+
+  function renderBadges(main) {
+    const v = viewed();
+    const s = statsFor(v.map);
+    const done = s.badges.filter((b) => b.done).length;
+    // Unlocked first, then the ones you're closest to.
+    const sorted = s.badges.slice().sort((a, b) => b.done - a.done || b.have / b.need - a.have / a.need);
+    main.innerHTML = `
+      <h2>🏅 ${t('badgesTitle')}</h2>
+      <p class="sub">${t('badgesSub', { n: done, m: s.badges.length })}</p>
+      ${v.readOnly ? `<div class="readonly-banner" style="border-radius:10px;margin-bottom:12px">👀 ${t('readOnly', { name: esc(v.user.name) })}</div>` : ''}
+      <div class="badges">${sorted
+        .map(
+          (b) => `<div class="badge ${b.done ? 'done' : ''}">
+          <div class="badge-icon">${b.icon}</div>
+          <b>${b[state.lang]}</b>
+          <small>${state.lang === 'nl' ? b.dnl : b.den}</small>
+          ${b.done ? `<span class="pill">✓ ${t('unlocked')}</span>` : `<div class="bar"><i style="width:${Math.round((b.have / b.need) * 100)}%"></i></div><small>${b.have} / ${b.need}</small>`}
+        </div>`
+        )
+        .join('')}</div>`;
+  }
+
   // ---------- leaderboard ----------
 
   async function renderRanking(main) {
@@ -824,7 +904,7 @@
           <div class="medal">${medals[i] || i + 1}</div>
           <span class="avatar" style="background:${esc(u.color)};cursor:default">${esc(initials(u.name))}</span>
           <div class="who"><b>${esc(u.name)}${u.id === state.me.id ? ` <span class="pill">${t('you')}</span>` : ''}</b>
-            <small>${t('level')} ${lvl.index} · ${lvl.level[state.lang]} · ${u.visited} ${t('countries')} · ⭐ ${u.wish}</small>
+            <small>${t('level')} ${lvl.index} · ${lvl.level[state.lang]} · ${u.visited} ${t('countries')} · 🏅 ${u.badges} · ⭐ ${u.wish}</small>
             <div class="bar"><i style="width:${Math.round((u.visited / 195) * 100)}%;background:${esc(u.color)}"></i></div></div>
           <div class="score">${num(u.xp)} XP<small>${Math.round((u.visited / 195) * 100)}% ${t('ofWorld')}</small></div>
         </div>`;

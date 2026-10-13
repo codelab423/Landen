@@ -25,6 +25,9 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
 - **Levels**: van *Thuisblijver* tot *Heeft Alles Gezien* (10 levels), met level-up meldingen.
 - **Per land**: jaartal en notitie (optioneel).
 - **Wensenlijst**: landen waar je nog heen wilt, met hoeveel XP ze opleveren.
+- **Badges**: 22 prestaties om vrij te spelen (Benelux, G7, alle werelddelen, heel Europa, …).
+- **Familiekaart**: hoe meer familieleden in een land zijn geweest, hoe donkerder het land. De host ziet ook wíe.
+- **🎲 Verras me**: kiest een willekeurig land waar je nog niet bent geweest (wensenlijst-landen vaker).
 - **Familie-ranglijst**: wie heeft de meeste XP. Iedereen ziet de scores, maar alleen zijn eigen kaart.
 - **Host / beheer**: de **eerste** persoon die een account maakt wordt host. De host ziet alle accounts,
   alle landen en kan ieders kaart bekijken, wachtwoorden resetten, andere hosts maken en accounts verwijderen.
