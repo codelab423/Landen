@@ -157,6 +157,12 @@ select:focus,
   filter: brightness(0.97);
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
 .btn.primary {
   background: var(--brand);
   border-color: var(--brand);

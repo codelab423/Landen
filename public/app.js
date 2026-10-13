@@ -570,7 +570,14 @@
       </div>`);
 
     const btns = m.querySelectorAll('[data-status]');
-    const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+    const save = m.querySelector('#c-save');
+    const hint = m.querySelector('#c-error');
+    // Nothing chosen and nothing stored yet → there is nothing to save.
+    const paint = () => {
+      btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+      save.disabled = !status && !row;
+      hint.textContent = save.disabled ? t('pickStatus') : '';
+    };
     paint();
     btns.forEach((b) =>
       b.addEventListener('click', () => {
