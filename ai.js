@@ -37,6 +37,17 @@ const usage = new Map(); // "userId:yyyy-mm-dd" -> count
 function register(app, { h, requireUser, bad, family }) {
   const client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
+  // Free mode: the same instructions and family data as one text, for pasting into claude.ai.
+  app.get(
+    '/api/ai/prompt',
+    requireUser,
+    h(async (req, res) => {
+      const [snap, ideas, plans] = await Promise.all([family.familySnapshot(), family.listIdeas(), family.listPlans()]);
+      const prompt = `${SYSTEM}\n\n${familyContext(snap, ideas, plans)}\n\nI am ${req.user.name}. My question:\n`;
+      res.json({ prompt });
+    })
+  );
+
   app.post(
     '/api/ai/chat',
     requireUser,

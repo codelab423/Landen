@@ -1301,11 +1301,7 @@
 
   function renderAi(body) {
     const st = state.settings;
-    if (!st.aiAvailable || st.aiEnabled === false) {
-      body.innerHTML = `<div class="card ai-off"><div style="font-size:48px">🤖</div><h3>${t('aiOffTitle')}</h3>
-        <p class="sub">${st.aiAvailable ? t('aiDisabled') : state.me.isAdmin ? t('aiNoKeyAdmin') : t('aiNoKeyMember')}</p></div>`;
-      return;
-    }
+    if (!st.aiAvailable || st.aiEnabled === false) return renderFreeAi(body);
     const suggestions = [t('aiSug1'), t('aiSug2'), t('aiSug3'), t('aiSug4')];
     body.innerHTML = `
       <div class="card chat">
@@ -1372,6 +1368,93 @@
         renderAi(body);
       };
     draw();
+  }
+
+  // Free mode: build the question with all family data, copy it and open claude.ai.
+  // The family pastes Claude's answer back to save it as a plan or idea.
+  function renderFreeAi(body) {
+    const suggestions = [t('aiSug1'), t('aiSug2'), t('aiSug3'), t('aiSug4')];
+    let base = null;
+    api('GET', '/api/ai/prompt')
+      .then((r) => (base = r.prompt))
+      .catch(() => {});
+    body.innerHTML = `
+      <div class="card free-ai">
+        <div class="free-head"><span class="w-icon">🤖</span><div><h3>${t('freeAiTitle')}</h3><small>${t('freeAiSub')}</small></div></div>
+        <ol class="steps"><li>${t('freeStep1')}</li><li>${t('freeStep2')}</li><li>${t('freeStep3')}</li></ol>
+        <div class="chips" style="margin-bottom:10px">${suggestions.map((s) => `<button class="chip" data-sug="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+        <textarea id="free-q" rows="3" maxlength="2000" placeholder="${t('aiPlaceholder')}"></textarea>
+        <div class="composer-row" style="margin-top:10px">
+          <button class="btn primary" id="free-go">📋 ${t('freeGo')}</button>
+        </div>
+        <textarea id="free-fallback" rows="6" readonly hidden></textarea>
+      </div>
+      <div class="card free-ai">
+        <div class="free-head"><span class="w-icon">📥</span><div><h3>${t('freeBackTitle')}</h3><small>${t('freeBackSub')}</small></div></div>
+        <label class="field"><span>${t('planTitle')}</span><input id="free-title" maxlength="120" placeholder="${t('planTitlePh')}"></label>
+        <textarea id="free-answer" rows="8" placeholder="${t('freePastePh')}"></textarea>
+        <div class="composer-row" style="margin-top:10px;flex-wrap:wrap">
+          <button class="btn primary" id="free-plan">🗓️ ${t('saveAsPlan')}</button>
+          <button class="btn" id="free-idea">💡 ${t('shareAsIdea')}</button>
+        </div>
+      </div>
+      ${state.me.isAdmin && !state.settings.aiAvailable ? `<p class="hint">💡 ${t('freeAdminHint')}</p>` : ''}`;
+    const q = document.getElementById('free-q');
+    body.querySelectorAll('[data-sug]').forEach(
+      (b) =>
+        (b.onclick = () => {
+          q.value = b.dataset.sug;
+          q.focus();
+        })
+    );
+    document.getElementById('free-go').onclick = async () => {
+      const question = q.value.trim();
+      if (!question) return toast(t('err_text_required'));
+      if (!document.getElementById('free-title').value) document.getElementById('free-title').value = question.slice(0, 80);
+      const full = (base || '') + question;
+      // Open the tab right away (inside the click) so popup blockers allow it.
+      const url = full.length < 6000 ? 'https://claude.ai/new?q=' + encodeURIComponent(full) : 'https://claude.ai/new';
+      window.open(url, '_blank', 'noopener');
+      try {
+        await navigator.clipboard.writeText(full);
+        toast('📋 ' + t('freeCopied'));
+      } catch (e) {
+        const fb = document.getElementById('free-fallback');
+        fb.hidden = false;
+        fb.value = full;
+        fb.select();
+        toast(t('freeCopyManual'));
+      }
+    };
+    const answer = () => document.getElementById('free-answer').value.trim();
+    document.getElementById('free-plan').onclick = async () => {
+      const text = answer();
+      const title = document.getElementById('free-title').value.trim() || q.value.trim().slice(0, 80);
+      if (!text || !title) return toast(t('err_text_required'));
+      try {
+        await api('POST', '/api/plans', { title, body: text, countries: mentionedCountries(text) });
+        toast('🗓️ ' + t('planSaved'));
+        document.getElementById('free-answer').value = '';
+      } catch (e) {
+        toast(errText(e));
+      }
+    };
+    document.getElementById('free-idea').onclick = async () => {
+      const text = answer();
+      if (!text) return toast(t('err_text_required'));
+      const first = text
+        .split('\n')
+        .map((l) => l.replace(/[#*\-•]/g, '').trim())
+        .find((l) => l.length > 10);
+      const idea = prompt(t('ideaPlaceholder'), (first || text).slice(0, 200));
+      if (!idea) return;
+      try {
+        await api('POST', '/api/ideas', { text: idea, country: mentionedCountries(text)[0] || '' });
+        toast('💡 ' + t('ideaShared'));
+      } catch (e) {
+        toast(errText(e));
+      }
+    };
   }
 
   // The question that led to an AI answer makes a good plan title.

@@ -33,7 +33,7 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
   geweest, zeldzaamste trofeeën, "alleen ik!", per werelddeel en de laatste reizen. Iedereen ziet het; de host
   kiest via **Dashboard beheren** welke onderdelen zichtbaar zijn.
 - **Ideeën & plannen**: deel reisideeën, stem met 👍, en bewaar reisplannen voor de hele familie.
-- **Familie-AI** (optioneel, kost geld): een reismaatje dat alle landen, wensenlijsten en ideeën kent. Het helpt plannen
+- **Familie-AI**: werkt **gratis** via je eigen claude.ai-account (de app kopieert je vraag mét alle familiedata en opent Claude; het antwoord plak je terug als plan of idee). Optioneel, en dan kost het geld: direct in de app, als reismaatje dat alle landen, wensenlijsten en ideeën kent. Het helpt plannen
   maken, en je kunt een antwoord met één klik bewaren als plan of delen als idee.
 - **Familie-ranglijst**: wie heeft de meeste XP. Iedereen ziet de scores, maar alleen zijn eigen kaart.
 - **Host / beheer**: de **eerste** persoon die een account maakt wordt host. De host ziet alle accounts,
@@ -89,7 +89,9 @@ daarom staat de data in Neon).
   10 minuten `https://<jouw-link>/healthz` opent. Het gratis plan heeft 750 uur per maand, genoeg om 24/7 aan te staan.
 - Nieuwe versies van de code (push naar `main`) worden automatisch online gezet.
 
-## Familie-AI aanzetten (optioneel)
+## Familie-AI direct in de app (optioneel, kost geld)
+
+Zonder key werkt de AI gratis via claude.ai (kopiëren en plakken). Wil je hem direct in de app:
 
 De AI gebruikt Claude van Anthropic en is het enige onderdeel dat geld kost (je betaalt per gebruik, meestal een
 paar cent per vraag).

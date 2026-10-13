@@ -1919,3 +1919,48 @@ h3 {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* ---------- free AI (claude.ai) ---------- */
+
+.free-ai {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.free-ai textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 10px 12px;
+  resize: vertical;
+  outline: none;
+}
+
+.free-ai textarea:focus {
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.free-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.free-head h3 {
+  margin: 0;
+}
+
+.free-head small {
+  color: var(--muted);
+}
+
+.steps {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+  color: var(--text);
+}
