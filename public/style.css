@@ -2155,3 +2155,63 @@ h3 {
 .tl-person .chips {
   grid-column: 1 / -1;
 }
+
+/* ---------- grouped latest trips ---------- */
+
+.feed li {
+  align-items: flex-start;
+}
+
+.feed-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-group summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 0;
+}
+
+.feed-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.feed-group summary::after {
+  content: ' ▾';
+  color: var(--muted);
+}
+
+.feed-group[open] summary::after {
+  content: ' ▴';
+}
+
+.feed-group .chips {
+  margin-top: 8px;
+}
+
+/* ---------- empty-state starters ---------- */
+
+.empty-start {
+  text-align: center;
+  padding: 26px 18px;
+}
+
+.empty-start p {
+  margin: 0 0 6px;
+}
+
+.starter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.starter-btn {
+  white-space: normal;
+  text-align: left;
+  min-height: 44px;
+  max-width: 100%;
+}

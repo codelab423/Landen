@@ -1225,11 +1225,27 @@
     },
     recent(d) {
       if (!d.recent.length) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
-      return `<ul class="feed">${d.recent
-        .map((r) => {
-          const u = userById(d.users, r.user);
-          return `<li><span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
-            <span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${L.BY_CODE[r.code].xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+      // Ticks by the same person within an hour of each other become one (expandable) line.
+      const toTime = (at) => new Date(String(at).replace(' ', 'T') + 'Z').getTime();
+      const groups = [];
+      d.recent.forEach((r) => {
+        const last = groups[groups.length - 1];
+        if (last && last.user === r.user && toTime(last.items[last.items.length - 1].at) - toTime(r.at) < 3600000) last.items.push(r);
+        else groups.push({ user: r.user, items: [r] });
+      });
+      return `<ul class="feed">${groups
+        .slice(0, 8)
+        .map((g) => {
+          const u = userById(d.users, g.user);
+          const face = `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+          const xp = L.xpFor(g.items.map((r) => r.code));
+          if (g.items.length === 1) {
+            const r = g.items[0];
+            return `<li>${face}<span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+          }
+          return `<li>${face}<details class="feed-group"><summary><b>${esc(u.name)}</b> ${t('addedN', { n: g.items.length })}
+            <small>+${num(xp)} XP · ${timeAgo(g.items[0].at)}</small></summary>
+            <div class="chips">${g.items.map((r) => chip(r.code)).join('')}</div></details></li>`;
         })
         .join('')}</ul>`;
     },
@@ -1289,6 +1305,32 @@
     ({ ideas: renderIdeaBoard, plans: renderPlans, ai: renderAi })[tab](body);
   }
 
+  // Starter suggestions for empty Ideas / Plans, based on the family's wishlists.
+  async function familyHints() {
+    if (state.dashCache && Date.now() - state.dashCache.at < 5 * 60000) return state.dashCache.data;
+    try {
+      const data = await api('GET', '/api/dashboard');
+      state.dashCache = { at: Date.now(), data };
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function starterIdeas() {
+    const d = await familyHints();
+    const out = [];
+    if (d) {
+      const firstName = (id) => userById(d.users, id).name.split(' ')[0];
+      d.wanted.slice(0, 1).forEach((w) => out.push({ text: t('sugGoTo', { country: cname(L.BY_CODE[w.code]), n: w.users.length }), country: w.code }));
+      d.ask.slice(0, 1).forEach((a) => out.push({ text: t('sugAskTips', { country: cname(L.BY_CODE[a.code]), name: firstName(a.experts[0]) }), country: a.code }));
+      const easy = d.never.find((c) => L.BY_CODE[c].tier === 1);
+      if (easy) out.push({ text: t('sugWeekend', { country: cname(L.BY_CODE[easy]) }), country: easy });
+    }
+    if (out.length < 3) out.push({ text: t('sugSummer'), country: '' });
+    return out.slice(0, 3);
+  }
+
   async function renderIdeaBoard(body) {
     body.innerHTML = `
       <form class="card composer" id="idea-form">
@@ -1319,7 +1361,23 @@
         </article>`
             )
             .join('')
-        : `<div class="card empty">${t('ideasEmpty')}</div>`;
+        : `<div class="card empty-start"><p><b>${t('ideasEmpty')}</b></p><p class="sub">${t('startHint')}</p><div class="starter" id="idea-starters">…</div></div>`;
+      if (!ideas.length)
+        starterIdeas().then((sugs) => {
+          const box = document.getElementById('idea-starters');
+          if (!box) return;
+          box.innerHTML = sugs.map((s, i) => `<button class="btn starter-btn" data-starter="${i}">💡 ${esc(s.text)}</button>`).join('');
+          box.querySelectorAll('[data-starter]').forEach(
+            (b) =>
+              (b.onclick = () => {
+                const s = sugs[Number(b.dataset.starter)];
+                const form = document.getElementById('idea-form');
+                form.text.value = s.text;
+                form.country.value = s.country;
+                form.text.focus();
+              })
+          );
+        });
       list.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
       list.querySelectorAll('[data-vote]').forEach((b) => (b.onclick = async () => draw((await api('POST', `/api/ideas/${b.dataset.vote}/vote`)).ideas)));
       list.querySelectorAll('[data-del-idea]').forEach(
@@ -1379,7 +1437,34 @@
         </details>`
             )
             .join('')
-        : `<div class="card empty">${t('plansEmpty')}</div>`;
+        : `<div class="card empty-start"><p><b>${t('plansEmpty')}</b></p><p class="sub">${t('startHint')}</p><div class="starter" id="plan-starters">…</div></div>`;
+      if (!plans.length)
+        familyHints().then((d) => {
+          const box = document.getElementById('plan-starters');
+          if (!box) return;
+          const codes = d && d.wanted.length ? d.wanted.slice(0, 2).map((w) => w.code) : [];
+          box.innerHTML =
+            codes.map((c) => `<button class="btn starter-btn" data-plan-for="${c}">🗓️ ${esc(t('planFor', { country: cname(L.BY_CODE[c]) }))}</button>`).join('') +
+            `<button class="btn starter-btn" data-plan-ai="${codes[0] || ''}">🤖 ${t('planWithAi')}</button>`;
+          box.querySelectorAll('[data-plan-for]').forEach(
+            (b) =>
+              (b.onclick = () => {
+                const c = b.dataset.planFor;
+                const form = document.getElementById('plan-form');
+                document.getElementById('plan-new').open = true;
+                form.title.value = t('planFor', { country: cname(L.BY_CODE[c]) });
+                form.country.value = c;
+                form.body.value = t('planTemplate');
+                form.title.focus();
+              })
+          );
+          box.querySelector('[data-plan-ai]').onclick = (e) => {
+            const c = e.currentTarget.dataset.planAi;
+            state.aiPrefill = c ? t('aiPlanFor', { country: cname(L.BY_CODE[c]) }) : t('aiSug1');
+            state.ideasTab = 'ai';
+            renderIdeas(document.getElementById('main'));
+          };
+        });
       list.querySelectorAll('[data-open]').forEach(
         (b) =>
           (b.onclick = (e) => {
@@ -1463,6 +1548,11 @@
     };
     const form = document.getElementById('chat-form');
     const ta = form.querySelector('textarea');
+    if (state.aiPrefill) {
+      ta.value = state.aiPrefill;
+      state.aiPrefill = null;
+      ta.focus();
+    }
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -1515,6 +1605,10 @@
       </div>
       ${state.me.isAdmin && !state.settings.aiAvailable ? `<p class="hint">💡 ${t('freeAdminHint')}</p>` : ''}`;
     const q = document.getElementById('free-q');
+    if (state.aiPrefill) {
+      q.value = state.aiPrefill;
+      state.aiPrefill = null;
+    }
     body.querySelectorAll('[data-sug]').forEach(
       (b) =>
         (b.onclick = () => {

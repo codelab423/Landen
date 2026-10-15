@@ -42,7 +42,8 @@ async function familySnapshot(db) {
       if (r.code !== L.HOME) trips.push({ user: id, code: r.code, year: r.year || null, visitedAt: r.visited_at || null, at: r.visited_at || r.updated_at });
     } else wish.get(id).push(r.code);
   });
-  trips.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  // Newest first; equal times stay together per person so bulk additions group nicely.
+  trips.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.user - b.user));
   return { users, visited, wish, trips };
 }
 
