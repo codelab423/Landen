@@ -3,7 +3,7 @@
 
   const L = window.LANDEN;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
-  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'ideas', 'ranking', 'admin'];
+  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'timeline', 'ideas', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
   const $toasts = document.getElementById('toasts');
@@ -22,6 +22,7 @@
     ideasTab: 'ideas',
     aiChat: [],
     aiBusy: false,
+    people: [], // [{id, name, color}] of the whole family, for avatars
     filters: { q: '', tier: '', continent: '', status: '' },
     authMode: 'login',
   };
@@ -49,16 +50,51 @@
   const num = (n) => Number(n).toLocaleString(state.lang === 'nl' ? 'nl-NL' : 'en-GB');
   const cname = (c) => c[state.lang];
   const flag = (code, cls) => `<img class="flag ${cls || ''}" src="/flags/${code.toLowerCase()}.svg" alt="" loading="lazy">`;
-  const tierBadge = (tier) => `<span class="tier-badge" style="background:${L.TIERS[tier].color}">${t('tier')} ${tier} · ${L.TIERS[tier][state.lang]}</span>`;
-  const initials = (name) => (name || '?').trim().charAt(0).toUpperCase();
+  const tierBadge = (tier) => `<span class="tier-badge" style="background:${L.TIERS[tier].badge}">${t('tier')} ${tier} · ${L.TIERS[tier][state.lang]}</span>`;
+  // Avatar letters: one initial, or two (first + last name, e.g. AT / AR) when another
+  // family member's name starts with the same letter.
+  function initials(name) {
+    const words = String(name || '?').trim().split(/\s+/);
+    const first = words[0].charAt(0).toUpperCase();
+    const clash = (state.people || []).some((p) => p.name !== name && String(p.name || '').trim().charAt(0).toUpperCase() === first);
+    if (!clash) return first;
+    if (words.length > 1) return first + words[words.length - 1].charAt(0).toUpperCase();
+    return first + words[0].charAt(1).toLowerCase();
+  }
+
+  // Free Render servers fall asleep. When a request takes long, tell people why.
+  let pendingSlow = 0;
+  function wakeBanner(show) {
+    let el = document.getElementById('wake-banner');
+    if (show && !el) {
+      el = document.createElement('div');
+      el.id = 'wake-banner';
+      el.className = 'wake-banner';
+      el.setAttribute('role', 'status');
+      el.innerHTML = `<span class="globe-spin" aria-hidden="true">🌍</span><span>${t('waking')}</span>`;
+      document.body.appendChild(el);
+    } else if (!show && el) el.remove();
+  }
 
   async function api(method, url, body) {
-    const res = await fetch(url, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'same-origin',
-    });
+    let slow = false;
+    const timer = setTimeout(() => {
+      slow = true;
+      pendingSlow++;
+      wakeBanner(true);
+    }, 3000);
+    let res;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'same-origin',
+      });
+    } finally {
+      clearTimeout(timer);
+      if (slow && --pendingSlow === 0) wakeBanner(false);
+    }
     let data = {};
     try {
       data = await res.json();
@@ -118,6 +154,7 @@
   // ---------- boot ----------
 
   async function boot() {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     document.documentElement.lang = state.lang;
     try {
       state.config = await api('GET', '/api/config');
@@ -141,8 +178,17 @@
     }
   }
 
-  function onLoggedIn(data) {
+  async function loadPeople() {
+    try {
+      state.people = (await api('GET', '/api/people')).people;
+    } catch (e) {
+      /* avatars fall back to one letter */
+    }
+  }
+
+  async function onLoggedIn(data) {
     loadSettings();
+    await loadPeople();
     state.me = data.user;
     if (data.user.lang && !storedLang()) state.lang = data.user.lang;
     setMine(data.countries);
@@ -170,7 +216,7 @@
     $app.innerHTML = shell(view) + '<main id="main"></main>';
     bindShell();
     const main = document.getElementById('main');
-    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
+    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, timeline: renderTimeline, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
   }
 
   function langToggle() {
@@ -251,6 +297,7 @@
       ['list', '🏆 ' + t('navList')],
       ['wish', '⭐ ' + t('navWish')],
       ['badges', '🏅 ' + t('navBadges')],
+      ['timeline', '🕒 ' + t('navTimeline')],
       ['ideas', '💡 ' + t('navIdeas')],
       ['ranking', '👨‍👩‍👧‍👦 ' + t('navRanking')],
     ];
@@ -262,7 +309,7 @@
         <div class="top-right">
           <span class="pill" title="${t('xp')}">Lv ${s.lvl.index} · ${num(s.xp)} XP</span>
           ${langToggle()}
-          <button class="avatar" id="profile-btn" style="background:${esc(state.me.color)}" title="${t('profile')}">${esc(initials(state.me.name))}</button>
+          <button class="avatar" id="profile-btn" style="background:${esc(state.me.color)}" title="${t('profile')} · ${esc(state.me.name)}" aria-label="${t('profile')} · ${esc(state.me.name)}">${esc(initials(state.me.name))}</button>
         </div>
       </div></header>`;
   }
@@ -322,11 +369,15 @@
           }
         </div>
         <div class="map-wrap" id="map-wrap">
-          <div class="map-loading" id="map-loading">${t('mapLoading')}</div>
+          <div class="map-loading" id="map-loading" role="status" aria-live="polite">
+            <div class="map-skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="globe-spin" aria-hidden="true">🌍</div>
+            <span>${t('mapLoading')}</span>
+          </div>
           <div class="zoom-btns">
-            <button data-zoom="in" title="${t('zoomIn')}">+</button>
-            <button data-zoom="out" title="${t('zoomOut')}">−</button>
-            <button data-zoom="reset" title="${t('zoomReset')}">⟲</button>
+            <button data-zoom="in" title="${t('zoomIn')}" aria-label="${t('zoomIn')}">+</button>
+            <button data-zoom="out" title="${t('zoomOut')}" aria-label="${t('zoomOut')}">−</button>
+            <button data-zoom="reset" title="${t('zoomReset')}" aria-label="${t('zoomReset')}">⟲</button>
           </div>
         </div>
         <div class="legend" id="legend"></div>
@@ -354,15 +405,22 @@
     main.querySelectorAll('[data-zoom]').forEach((b) => (b.onclick = () => zoomBy(b.dataset.zoom)));
 
     renderContinents(v.map);
-    ensureMap().then(() => {
-      const wrap = document.getElementById('map-wrap');
-      if (!wrap) return;
-      const loading = document.getElementById('map-loading');
-      if (loading) loading.remove();
-      if (mapState.node.parentNode === wrap) return paintMap();
-      wrap.insertBefore(mapState.node, wrap.firstChild);
-      paintMap();
-    });
+    ensureMap()
+      .catch(() => {
+        const l = document.getElementById('map-loading');
+        if (l) l.querySelector('span').textContent = t('mapError');
+        return Promise.reject();
+      })
+      .then(() => {
+        const wrap = document.getElementById('map-wrap');
+        if (!wrap) return;
+        const loading = document.getElementById('map-loading');
+        if (loading) loading.remove();
+        if (mapState.node.parentNode === wrap) return paintMap();
+        wrap.insertBefore(mapState.node, wrap.firstChild);
+        paintMap();
+      })
+      .catch(() => {});
   }
 
   function renderContinents(map) {
@@ -378,12 +436,31 @@
       .join('');
   }
 
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = reject;
+      document.head.appendChild(el);
+    });
+  }
+
+  // The map (d3 + topojson + map data) is only loaded when the map page is opened.
   function ensureMap() {
     if (mapState.loaded) return Promise.resolve();
     if (mapState.loading) return mapState.loading;
-    mapState.loading = fetch('/data/world.json')
-      .then((r) => r.json())
-      .then(buildMap);
+    const v = (state.config && state.config.mapVersion) || '';
+    mapState.loading = Promise.all([
+      fetch('/data/world.json?v=' + v).then((r) => r.json()),
+      window.d3 ? null : loadScript('/vendor/d3.min.js'),
+      window.topojson ? null : loadScript('/vendor/topojson-client.min.js'),
+    ])
+      .then(([world]) => buildMap(world))
+      .catch((e) => {
+        mapState.loading = null;
+        throw e;
+      });
     return mapState.loading;
   }
 
@@ -436,7 +513,15 @@
     // Tiny countries get a clickable dot so you can actually hit them.
     const tiny = [];
     area.forEach((v, code) => {
-      if (v.area < 6) tiny.push({ code, country: L.BY_CODE[code], xy: path.centroid(v.feature) });
+      if (v.area < 6) {
+        // Some micro-states (Vatican City) have no area at all; fall back to the middle of their bounds.
+        let xy = path.centroid(v.feature);
+        if (!isFinite(xy[0])) {
+          const [[x0, y0], [x1, y1]] = d3.geoBounds(v.feature);
+          xy = projection([(x0 + x1) / 2, (y0 + y1) / 2]);
+        }
+        tiny.push({ code, country: L.BY_CODE[code], xy });
+      }
     });
     mapState.dots = g
       .selectAll('circle.dot')
@@ -726,6 +811,39 @@
     return back.querySelector('.modal');
   }
 
+  // Promise-based confirmation dialog; resolves true only when the danger button is pressed.
+  function confirmModal({ icon, title, text, confirmLabel }) {
+    return new Promise((resolve) => {
+      const m = openModal(`
+        <div class="modal-head"><span style="font-size:36px" aria-hidden="true">${icon || '⚠️'}</span><div><h3 id="cm-title">${title}</h3></div></div>
+        <p class="confirm-text">${text}</p>
+        <div class="modal-foot">
+          <span></span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn" id="cm-cancel">${t('cancel')}</button>
+            <button class="btn danger-solid" id="cm-ok">${confirmLabel}</button>
+          </div>
+        </div>`);
+      m.setAttribute('aria-labelledby', 'cm-title');
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        observer.disconnect();
+        closeModal();
+        resolve(v);
+      };
+      // Closing the dialog any other way (Esc, clicking outside) counts as "cancel".
+      const observer = new MutationObserver(() => {
+        if (!$modalRoot.contains(m)) finish(false);
+      });
+      observer.observe($modalRoot, { childList: true });
+      m.querySelector('#cm-cancel').onclick = () => finish(false);
+      m.querySelector('#cm-ok').onclick = () => finish(true);
+      m.querySelector('#cm-cancel').focus(); // the safe choice has focus
+    });
+  }
+
   function closeModal() {
     $modalRoot.innerHTML = '';
   }
@@ -749,10 +867,14 @@
         readOnly
           ? ''
           : c.code === L.HOME
-          ? `<div class="actions"><span class="icon-btn on-visited" title="${t('homeCountry')}">🏠</span></div>`
+          ? `<div class="actions"><span class="icon-btn on-visited" role="img" title="${t('homeCountry')}" aria-label="${t('homeCountry')}">🏠</span></div>`
           : `<div class="actions">
-        <button class="icon-btn ${st === 'visited' ? 'on-visited' : ''}" data-toggle="visited" data-code="${c.code}" title="${t('visited')}">✓</button>
-        <button class="icon-btn ${st === 'wish' ? 'on-wish' : ''}" data-toggle="wish" data-code="${c.code}" title="${t('wish')}">★</button>
+        <button class="icon-btn ${st === 'visited' ? 'on-visited' : ''}" data-toggle="visited" data-code="${c.code}"
+          title="${t(st === 'visited' ? 'unmarkVisited' : 'markVisitedLabel', { country: cname(c) })}"
+          aria-label="${t(st === 'visited' ? 'unmarkVisited' : 'markVisitedLabel', { country: cname(c) })}" aria-pressed="${st === 'visited'}"><span aria-hidden="true">✓</span></button>
+        <button class="icon-btn ${st === 'wish' ? 'on-wish' : ''}" data-toggle="wish" data-code="${c.code}"
+          title="${t(st === 'wish' ? 'unmarkWish' : 'markWishLabel', { country: cname(c) })}"
+          aria-label="${t(st === 'wish' ? 'unmarkWish' : 'markWishLabel', { country: cname(c) })}" aria-pressed="${st === 'wish'}"><span aria-hidden="true">★</span></button>
       </div>`
       }
     </div>`;
@@ -912,7 +1034,7 @@
     return `<span class="avatars">${shown
       .map((id) => {
         const u = userById(users, id);
-        return `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+        return `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>`;
       })
       .join('')}${extra > 0 ? `<span class="avatar xs more">+${extra}</span>` : ''}</span>`;
   }
@@ -982,6 +1104,7 @@
 
   const WIDGET_ICONS = {
     stats: '📈',
+    next: '🎯',
     never: '🧭',
     wanted: '😍',
     everyone: '🤝',
@@ -1024,7 +1147,7 @@
     }
     if (currentView() !== 'dash') return;
     const hidden = new Set(d.hiddenWidgets || []);
-    const order = ['stats', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
+    const order = ['stats', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
     const el = document.getElementById('widgets');
     el.innerHTML = order
       .filter((k) => !hidden.has(k))
@@ -1036,7 +1159,35 @@
     el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
   }
 
+  // Badges you're closest to, with what's still missing.
+  function nextBadges(max) {
+    const s = statsFor(state.mine);
+    return s.badges
+      .filter((b) => !b.done)
+      .sort((a, b) => a.need - a.have - (b.need - b.have) || b.have / b.need - a.have / a.need)
+      .slice(0, max);
+  }
+
+  function unitLabel(n, unit) {
+    return t((n === 1 ? 'unit1_' : 'unitN_') + unit);
+  }
+
   const WIDGETS = {
+    next() {
+      const list = nextBadges(3);
+      if (!list.length) return `<p class="w-empty">${t('w_next_all')}</p>`;
+      return `<ul class="next-list">${list
+        .map((b) => {
+          const left = b.need - b.have;
+          const name = `<b>${b.icon} ${b[state.lang]}</b>`;
+          const what =
+            b.missing && b.missing.length <= 3
+              ? `${t('nextMissing', { n: left, unit: unitLabel(left, b.unit), badge: name })} <span class="chips">${b.missing.map(chip).join('')}</span>`
+              : t('nextCount', { n: left, unit: unitLabel(left, b.unit), badge: name });
+          return `<li><div>${what}</div><div class="bar" title="${b.have}/${b.need}"><i style="width:${Math.round((b.have / b.need) * 100)}%"></i></div></li>`;
+        })
+        .join('')}</ul><a class="linkish" href="#/badges">${t('allBadges')} →</a>`;
+    },
     stats(d) {
       const s = d.stats;
       const cell = (v, label) => `<div class="mini"><b>${v}</b><small>${label}</small></div>`;
@@ -1044,7 +1195,8 @@
         ${cell(s.members, t('members'))}
         ${cell(`${s.countries}<span>/195</span>`, t('countries'))}
         ${cell(Math.round((s.countries / 195) * 100) + '%', t('ofWorld'))}
-        ${cell(num(s.xp), t('xpTogether'))}
+        ${cell(num(s.xpSum), t('xpSum'))}
+        ${cell(num(s.xpUnique), t('xpUnique'))}
         ${cell('🏅 ' + s.badges, t('navBadges'))}
         ${cell('⭐ ' + s.wishes, t('dreamCountries'))}
       </div>`;
@@ -1080,7 +1232,7 @@
       return d.unique
         .map((u) => {
           const who = userById(d.users, u.user);
-          return `<div class="who-row"><span class="avatar xs" style="background:${esc(who.color)}">${esc(initials(who.name))}</span><b>${esc(who.name)}</b>
+          return `<div class="who-row"><span class="avatar xs" style="background:${esc(who.color)}" title="${esc(who.name)}" aria-label="${esc(who.name)}">${esc(initials(who.name))}</span><b>${esc(who.name)}</b>
             <div class="chips">${u.codes.slice(0, 8).map(chip).join('')}${u.codes.length > 8 ? `<span class="chip ghost">+${u.codes.length - 8}</span>` : ''}</div></div>`;
         })
         .join('');
@@ -1110,11 +1262,27 @@
     },
     recent(d) {
       if (!d.recent.length) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
-      return `<ul class="feed">${d.recent
-        .map((r) => {
-          const u = userById(d.users, r.user);
-          return `<li><span class="avatar xs" style="background:${esc(u.color)}">${esc(initials(u.name))}</span>
-            <span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${L.BY_CODE[r.code].xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+      // Ticks by the same person within an hour of each other become one (expandable) line.
+      const toTime = (at) => new Date(String(at).replace(' ', 'T') + 'Z').getTime();
+      const groups = [];
+      d.recent.forEach((r) => {
+        const last = groups[groups.length - 1];
+        if (last && last.user === r.user && toTime(last.items[last.items.length - 1].at) - toTime(r.at) < 3600000) last.items.push(r);
+        else groups.push({ user: r.user, items: [r] });
+      });
+      return `<ul class="feed">${groups
+        .slice(0, 8)
+        .map((g) => {
+          const u = userById(d.users, g.user);
+          const face = `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+          const xp = L.xpFor(g.items.map((r) => r.code));
+          if (g.items.length === 1) {
+            const r = g.items[0];
+            return `<li>${face}<span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+          }
+          return `<li>${face}<details class="feed-group"><summary><b>${esc(u.name)}</b> ${t('addedN', { n: g.items.length })}
+            <small>+${num(xp)} XP · ${timeAgo(g.items[0].at)}</small></summary>
+            <div class="chips">${g.items.map((r) => chip(r.code)).join('')}</div></details></li>`;
         })
         .join('')}</ul>`;
     },
@@ -1174,6 +1342,32 @@
     ({ ideas: renderIdeaBoard, plans: renderPlans, ai: renderAi })[tab](body);
   }
 
+  // Starter suggestions for empty Ideas / Plans, based on the family's wishlists.
+  async function familyHints() {
+    if (state.dashCache && Date.now() - state.dashCache.at < 5 * 60000) return state.dashCache.data;
+    try {
+      const data = await api('GET', '/api/dashboard');
+      state.dashCache = { at: Date.now(), data };
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function starterIdeas() {
+    const d = await familyHints();
+    const out = [];
+    if (d) {
+      const firstName = (id) => userById(d.users, id).name.split(' ')[0];
+      d.wanted.slice(0, 1).forEach((w) => out.push({ text: t('sugGoTo', { country: cname(L.BY_CODE[w.code]), n: w.users.length }), country: w.code }));
+      d.ask.slice(0, 1).forEach((a) => out.push({ text: t('sugAskTips', { country: cname(L.BY_CODE[a.code]), name: firstName(a.experts[0]) }), country: a.code }));
+      const easy = d.never.find((c) => L.BY_CODE[c].tier === 1);
+      if (easy) out.push({ text: t('sugWeekend', { country: cname(L.BY_CODE[easy]) }), country: easy });
+    }
+    if (out.length < 3) out.push({ text: t('sugSummer'), country: '' });
+    return out.slice(0, 3);
+  }
+
   async function renderIdeaBoard(body) {
     body.innerHTML = `
       <form class="card composer" id="idea-form">
@@ -1191,11 +1385,11 @@
         ? ideas
             .map(
               (i) => `<article class="idea">
-          <button class="vote ${i.mine ? 'on' : ''}" data-vote="${i.id}" title="${t('vote')}">👍<b>${i.votes}</b></button>
+          <button class="vote ${i.mine ? 'on' : ''}" data-vote="${i.id}" title="${t('vote')}" aria-label="${t('vote')} (${i.votes})" aria-pressed="${i.mine}">👍<b>${i.votes}</b></button>
           <div class="idea-body">
             <p>${esc(i.text)}</p>
             <footer>
-              <span class="avatar xs" style="background:${esc(i.color)}">${esc(initials(i.name))}</span>
+              <span class="avatar xs" style="background:${esc(i.color)}" title="${esc(i.name)}" aria-label="${esc(i.name)}">${esc(initials(i.name))}</span>
               <span>${esc(i.name)} · ${timeAgo(i.createdAt)}</span>
               ${i.country ? chip(i.country) : ''}
               ${i.user === state.me.id || state.me.isAdmin ? `<button class="linkish danger" data-del-idea="${i.id}">${t('remove')}</button>` : ''}
@@ -1204,7 +1398,23 @@
         </article>`
             )
             .join('')
-        : `<div class="card empty">${t('ideasEmpty')}</div>`;
+        : `<div class="card empty-start"><p><b>${t('ideasEmpty')}</b></p><p class="sub">${t('startHint')}</p><div class="starter" id="idea-starters">…</div></div>`;
+      if (!ideas.length)
+        starterIdeas().then((sugs) => {
+          const box = document.getElementById('idea-starters');
+          if (!box) return;
+          box.innerHTML = sugs.map((s, i) => `<button class="btn starter-btn" data-starter="${i}">💡 ${esc(s.text)}</button>`).join('');
+          box.querySelectorAll('[data-starter]').forEach(
+            (b) =>
+              (b.onclick = () => {
+                const s = sugs[Number(b.dataset.starter)];
+                const form = document.getElementById('idea-form');
+                form.text.value = s.text;
+                form.country.value = s.country;
+                form.text.focus();
+              })
+          );
+        });
       list.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
       list.querySelectorAll('[data-vote]').forEach((b) => (b.onclick = async () => draw((await api('POST', `/api/ideas/${b.dataset.vote}/vote`)).ideas)));
       list.querySelectorAll('[data-del-idea]').forEach(
@@ -1255,7 +1465,7 @@
           <summary>
             <div class="plan-head">
               <h3>${esc(p.title)}</h3>
-              <small><span class="avatar xs" style="background:${esc(p.color)}">${esc(initials(p.name))}</span> ${esc(p.name)} · ${timeAgo(p.createdAt)}</small>
+              <small><span class="avatar xs" style="background:${esc(p.color)}" title="${esc(p.name)}" aria-label="${esc(p.name)}">${esc(initials(p.name))}</span> ${esc(p.name)} · ${timeAgo(p.createdAt)}</small>
             </div>
             <div class="chips">${p.countries.map(chip).join('')}</div>
           </summary>
@@ -1264,7 +1474,34 @@
         </details>`
             )
             .join('')
-        : `<div class="card empty">${t('plansEmpty')}</div>`;
+        : `<div class="card empty-start"><p><b>${t('plansEmpty')}</b></p><p class="sub">${t('startHint')}</p><div class="starter" id="plan-starters">…</div></div>`;
+      if (!plans.length)
+        familyHints().then((d) => {
+          const box = document.getElementById('plan-starters');
+          if (!box) return;
+          const codes = d && d.wanted.length ? d.wanted.slice(0, 2).map((w) => w.code) : [];
+          box.innerHTML =
+            codes.map((c) => `<button class="btn starter-btn" data-plan-for="${c}">🗓️ ${esc(t('planFor', { country: cname(L.BY_CODE[c]) }))}</button>`).join('') +
+            `<button class="btn starter-btn" data-plan-ai="${codes[0] || ''}">🤖 ${t('planWithAi')}</button>`;
+          box.querySelectorAll('[data-plan-for]').forEach(
+            (b) =>
+              (b.onclick = () => {
+                const c = b.dataset.planFor;
+                const form = document.getElementById('plan-form');
+                document.getElementById('plan-new').open = true;
+                form.title.value = t('planFor', { country: cname(L.BY_CODE[c]) });
+                form.country.value = c;
+                form.body.value = t('planTemplate');
+                form.title.focus();
+              })
+          );
+          box.querySelector('[data-plan-ai]').onclick = (e) => {
+            const c = e.currentTarget.dataset.planAi;
+            state.aiPrefill = c ? t('aiPlanFor', { country: cname(L.BY_CODE[c]) }) : t('aiSug1');
+            state.ideasTab = 'ai';
+            renderIdeas(document.getElementById('main'));
+          };
+        });
       list.querySelectorAll('[data-open]').forEach(
         (b) =>
           (b.onclick = (e) => {
@@ -1348,6 +1585,11 @@
     };
     const form = document.getElementById('chat-form');
     const ta = form.querySelector('textarea');
+    if (state.aiPrefill) {
+      ta.value = state.aiPrefill;
+      state.aiPrefill = null;
+      ta.focus();
+    }
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -1400,6 +1642,10 @@
       </div>
       ${state.me.isAdmin && !state.settings.aiAvailable ? `<p class="hint">💡 ${t('freeAdminHint')}</p>` : ''}`;
     const q = document.getElementById('free-q');
+    if (state.aiPrefill) {
+      q.value = state.aiPrefill;
+      state.aiPrefill = null;
+    }
     body.querySelectorAll('[data-sug]').forEach(
       (b) =>
         (b.onclick = () => {
@@ -1499,6 +1745,81 @@
     }
   }
 
+  // ---------- timeline ----------
+
+  // Year of a trip: the travel year if someone filled it in, otherwise the year it was ticked.
+  const tripYear = (i) => i.year || (i.visitedAt ? Number(i.visitedAt.slice(0, 4)) : null);
+
+  async function renderTimeline(main) {
+    main.innerHTML = `
+      <div class="page-head">
+        <div><h2>🕒 ${t('timelineTitle')}</h2><p class="sub">${t('timelineSub')}</p></div>
+        <label class="tl-filter">${t('timelineWho')}
+          <select id="tl-who"><option value="">${t('everyone')}</option>${state.people
+            .map((p) => `<option value="${p.id}">${esc(p.name)}</option>`)
+            .join('')}</select></label>
+      </div>
+      <div id="tl-body"><div class="empty">…</div></div>`;
+    let data;
+    try {
+      data = await api('GET', '/api/timeline');
+    } catch (e) {
+      document.getElementById('tl-body').innerHTML = `<div class="empty">${errText(e)}</div>`;
+      return;
+    }
+    if (currentView() !== 'timeline') return;
+    const sel = document.getElementById('tl-who');
+    const body = document.getElementById('tl-body');
+    const draw = () => {
+      const who = Number(sel.value) || null;
+      const items = data.items.filter((i) => !who || i.user === who);
+      const byYear = new Map();
+      items.forEach((i) => {
+        const y = tripYear(i) || 'none';
+        if (!byYear.has(y)) byYear.set(y, []);
+        byYear.get(y).push(i);
+      });
+      const years = [...byYear.keys()].sort((a, b) => (a === 'none' ? 1 : b === 'none' ? -1 : b - a));
+      if (!years.length) {
+        body.innerHTML = `<div class="card empty">${t('timelineEmpty')}</div>`;
+        return;
+      }
+      body.innerHTML = `<ol class="timeline">${years
+        .map((y) => {
+          const list = byYear.get(y);
+          const perUser = new Map();
+          list.forEach((i) => {
+            if (!perUser.has(i.user)) perUser.set(i.user, []);
+            perUser.get(i.user).push(i);
+          });
+          return `<li class="tl-year">
+            <div class="tl-dot" aria-hidden="true"></div>
+            <h3>${y === 'none' ? t('noDate') : y} <small>${t(list.length === 1 ? 'countries1' : 'countriesN', { n: list.length })} · +${num(L.xpFor(list.map((i) => i.code)))} XP</small></h3>
+            ${[...perUser.entries()]
+              .map(([uid, trips]) => {
+                const u = userById(data.users, uid);
+                return `<div class="tl-person">
+                  <span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
+                  <b>${esc(u.name)}</b><small>${trips.length}</small>
+                  <div class="chips">${trips
+                    .map((i) => {
+                      const ticked = i.visitedAt ? t('tickedOn', { date: new Date(i.visitedAt.replace(' ', 'T') + 'Z').toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB') }) : '';
+                      return `<button class="chip" data-open="${i.code}" title="${esc(ticked)}">${flag(i.code, 'sm')}${cname(L.BY_CODE[i.code])}</button>`;
+                    })
+                    .join('')}</div>
+                </div>`;
+              })
+              .join('')}
+          </li>`;
+        })
+        .join('')}</ol>
+        <p class="hint">📅 ${t('timelineHint')}</p>`;
+      body.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+    };
+    sel.onchange = draw;
+    draw();
+  }
+
   // ---------- leaderboard ----------
 
   async function renderRanking(main) {
@@ -1518,7 +1839,7 @@
             const lvl = L.levelFor(u.xp);
             return `<div class="lb-row ${u.id === state.me.id ? 'me' : ''}">
           <div class="medal">${medals[i] || i + 1}</div>
-          <span class="avatar" style="background:${esc(u.color)};cursor:default">${esc(initials(u.name))}</span>
+          <span class="avatar" style="background:${esc(u.color)};cursor:default" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
           <div class="who"><b>${esc(u.name)}${u.id === state.me.id ? ` <span class="pill">${t('you')}</span>` : ''}</b>
             <small>${t('level')} ${lvl.index} · ${lvl.level[state.lang]} · ${u.visited} ${t('countries')} · 🏅 ${u.badges} · ⭐ ${u.wish}</small>
             <div class="bar"><i style="width:${Math.round((u.visited / 195) * 100)}%;background:${esc(u.color)}"></i></div></div>
@@ -1538,20 +1859,20 @@
       loadAdminUsers();
       return;
     }
-    const union = new Set();
-    users.forEach((u) => u.countries.forEach((r) => r.status === 'visited' && union.add(r.code)));
+    const totals = L.familyTotals(users.map((u) => u.countries.filter((r) => r.status === 'visited').map((r) => r.code)));
     main.innerHTML = `
       <h2>👑 ${t('adminTitle')}</h2><p class="sub">${t('adminSub')}</p>
       <div class="stats">
-        <div class="stat"><div class="label">${t('totalFamily')}</div><div class="value">${union.size}</div><div class="extra">${t('uniqueCountries')}</div></div>
-        <div class="stat"><div class="label">${t('xp')}</div><div class="value">${num(L.xpFor([...union]))}</div><div class="extra">${Math.round((union.size / 195) * 100)}% ${t('ofWorld')}</div></div>
+        <div class="stat"><div class="label">${t('totalFamily')}</div><div class="value">${totals.countries}</div><div class="extra">${t('uniqueCountries')} · ${Math.round((totals.countries / 195) * 100)}% ${t('ofWorld')}</div></div>
+        <div class="stat"><div class="label">${t('xpSum')}</div><div class="value">${num(totals.xpSum)}</div><div class="extra">${t('xpSumHint')}</div></div>
+        <div class="stat"><div class="label">${t('xpUnique')}</div><div class="value">${num(totals.xpUnique)}</div><div class="extra">${t('xpUniqueHint')}</div></div>
       </div>
       <div class="card table-wrap"><table>
         <thead><tr><th>${t('name')}</th><th>${t('visited')}</th><th>⭐</th><th>XP</th><th>${t('level')}</th><th>${t('joined')}</th><th></th></tr></thead>
         <tbody>${users
           .map(
             (u) => `<tr>
-            <td><div style="display:flex;align-items:center;gap:8px"><span class="avatar sm" style="background:${esc(u.color)}">${esc(initials(u.name))}</span>
+            <td><div style="display:flex;align-items:center;gap:8px"><span class="avatar sm" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
               <div><b>${esc(u.name)}</b>${u.isAdmin ? `<span class="pill">${t('host')}</span>` : ''}<br><small style="color:var(--muted)">${esc(u.email)}</small>
               <div class="flags-strip">${u.countries
                 .filter((r) => r.status === 'visited')
@@ -1601,9 +1922,16 @@
       (b) =>
         (b.onclick = async () => {
           const u = byId(b.dataset.del);
-          if (!confirm(t('confirmDelete', { name: u.name }))) return;
+          const ok = await confirmModal({
+            icon: '🗑️',
+            title: t('deleteTitle', { name: esc(u.name) }),
+            text: t('deleteText', { name: `<b>${esc(u.name)}</b>`, n: u.visited }),
+            confirmLabel: t('deleteConfirm', { name: esc(u.name) }),
+          });
+          if (!ok) return;
           await api('DELETE', `/api/admin/users/${u.id}`);
           if (state.viewingId === u.id) state.viewingId = null;
+          loadPeople();
           loadAdminUsers();
         })
     );
@@ -1613,12 +1941,21 @@
 
   function openProfile() {
     let color = state.me.color;
+    // Colours are unique per family member: show who already has which one.
+    const takenBy = {};
+    state.people.forEach((p) => {
+      if (p.id !== state.me.id) takenBy[String(p.color).toLowerCase()] = p.name;
+    });
     const m = openModal(`
-      <div class="modal-head"><span class="avatar" id="p-avatar" style="background:${esc(color)};width:52px;height:52px;font-size:22px">${esc(initials(state.me.name))}</span>
+      <div class="modal-head"><span class="avatar" id="p-avatar" style="background:${esc(color)};width:52px;height:52px;font-size:22px" title="${esc(state.me.name)}">${esc(initials(state.me.name))}</span>
         <div><h3>${t('profile')}</h3><small>${esc(state.me.email)}</small></div></div>
       <label class="field"><span>${t('name')}</span><input name="name" value="${esc(state.me.name)}" maxlength="40"></label>
       <div class="field"><span>${t('yourColor')}</span></div>
-      <div class="color-row">${PRESET_COLORS.map((c) => `<button type="button" data-color="${c}" style="background:${c}" class="${c === color ? 'on' : ''}"></button>`).join('')}
+      <div class="color-row">${PRESET_COLORS.map((c) => {
+        const who = takenBy[c.toLowerCase()];
+        return `<button type="button" data-color="${c}" style="background:${c}" class="${c === color ? 'on' : ''} ${who ? 'taken' : ''}"
+          ${who ? 'disabled' : ''} title="${who ? esc(t('colorTaken', { name: who })) : c}" aria-label="${who ? esc(t('colorTaken', { name: who })) : c}"></button>`;
+      }).join('')}
         <input type="color" id="p-custom" value="${esc(color)}" title="…"></div>
       <details style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600">${t('changePassword')}</summary>
         <label class="field" style="margin-top:10px"><span>${t('currentPassword')}</span><input name="cur" type="password" autocomplete="current-password"></label>
@@ -1654,6 +1991,7 @@
       if (nw) Object.assign(body, { currentPassword: cur, newPassword: nw });
       try {
         state.me = (await api('PATCH', '/api/me', body)).user;
+        await loadPeople();
         closeModal();
         toast(t('saved'));
         if (state.me.isAdmin) loadAdminUsers();

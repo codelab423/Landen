@@ -7,11 +7,12 @@
 // Shared by the server (require) and the browser (window.LANDEN).
 (function (root) {
   var TIERS = {
-    1: { xp: 50, color: '#22c55e', nl: 'Makkelijk', en: 'Easy' },
-    2: { xp: 100, color: '#3b82f6', nl: 'Gemiddeld', en: 'Medium' },
-    3: { xp: 200, color: '#a855f7', nl: 'Avontuurlijk', en: 'Adventurous' },
-    4: { xp: 350, color: '#f97316', nl: 'Uitdagend', en: 'Challenging' },
-    5: { xp: 500, color: '#ef4444', nl: 'Legendarisch', en: 'Legendary' },
+    // color: map fill; badge: darker shade so white text on it stays readable (>= 5:1)
+    1: { xp: 50, color: '#22c55e', badge: '#15803d', nl: 'Makkelijk', en: 'Easy' },
+    2: { xp: 100, color: '#3b82f6', badge: '#1d4ed8', nl: 'Gemiddeld', en: 'Medium' },
+    3: { xp: 200, color: '#a855f7', badge: '#7e22ce', nl: 'Avontuurlijk', en: 'Adventurous' },
+    4: { xp: 350, color: '#f97316', badge: '#c2410c', nl: 'Uitdagend', en: 'Challenging' },
+    5: { xp: 500, color: '#ef4444', badge: '#b91c1c', nl: 'Legendarisch', en: 'Legendary' },
   };
 
   var CONTINENTS = {
@@ -280,12 +281,15 @@
   // ---------- badges ----------
   // Each badge counts how many of something you have (`have`) against a target (`need`).
 
+  // Badges that need specific countries remember them, so the app can say which are missing.
   function inSet(codes) {
-    return function (v) {
+    var fn = function (v) {
       return codes.filter(function (c) {
         return v.set[c];
       }).length;
     };
+    fn.codes = codes;
+    return fn;
   }
   function ofTier(tier) {
     return function (v) {
@@ -295,11 +299,17 @@
     };
   }
   function continentDone(k) {
-    return function (v) {
+    var fn = function (v) {
       return v.list.filter(function (c) {
         return BY_CODE[c] && BY_CODE[c].continent === k;
       }).length;
     };
+    fn.codes = COUNTRIES.filter(function (c) {
+      return c.continent === k;
+    }).map(function (c) {
+      return c.code;
+    });
+    return fn;
   }
   function continentSize(k) {
     return COUNTRIES.filter(function (c) {
@@ -321,10 +331,10 @@
     { id: 'c25', icon: '🌍', need: 25, have: total, nl: '25 landen', en: '25 countries', dnl: 'Bezoek 25 landen', den: 'Visit 25 countries' },
     { id: 'c50', icon: '🗺️', need: 50, have: total, nl: '50 landen', en: '50 countries', dnl: 'Bezoek 50 landen', den: 'Visit 50 countries' },
     { id: 'c100', icon: '💯', need: 100, have: total, nl: '100 landen', en: '100 countries', dnl: 'Bezoek 100 landen', den: 'Visit 100 countries' },
-    { id: 'cont3', icon: '🧭', need: 3,
+    { id: 'cont3', icon: '🧭', need: 3, unit: 'continents',
       have: function (v) { var s = {}; v.list.forEach(function (c) { if (BY_CODE[c]) s[BY_CODE[c].continent] = 1; }); return Object.keys(s).length; },
       nl: 'Drie werelddelen', en: 'Three continents', dnl: 'Landen in 3 werelddelen', den: 'Countries on 3 continents' },
-    { id: 'cont6', icon: '🌐', need: 6,
+    { id: 'cont6', icon: '🌐', need: 6, unit: 'continents',
       have: function (v) { var s = {}; v.list.forEach(function (c) { if (BY_CODE[c]) s[BY_CODE[c].continent] = 1; }); return Object.keys(s).length; },
       nl: 'Alle werelddelen', en: 'Every continent', dnl: 'Landen in alle 6 werelddelen', den: 'Countries on all 6 continents' },
     { id: 'nordic', icon: '❄️', need: 5, have: inSet(['DK', 'NO', 'SE', 'FI', 'IS']),
@@ -333,13 +343,13 @@
       nl: 'Mini-landen', en: 'Microstates', dnl: 'Vaticaan, Monaco, San Marino, Liechtenstein, Andorra', den: 'Vatican, Monaco, San Marino, Liechtenstein, Andorra' },
     { id: 'g7', icon: '💼', need: 7, have: inSet(['US', 'CA', 'GB', 'FR', 'DE', 'IT', 'JP']),
       nl: 'G7', en: 'G7', dnl: 'Alle G7-landen', den: 'All G7 countries' },
-    { id: 'daredevil', icon: '🔥', need: 5, have: ofTier(4),
+    { id: 'daredevil', icon: '🔥', need: 5, unit: 'tier4', have: ofTier(4),
       nl: 'Durfal', en: 'Daredevil', dnl: '5 landen uit Tier 4', den: '5 Tier 4 countries' },
-    { id: 'legend1', icon: '🐉', need: 1, have: ofTier(5),
+    { id: 'legend1', icon: '🐉', need: 1, unit: 'tier5', have: ofTier(5),
       nl: 'Legendarisch', en: 'Legendary', dnl: 'Je eerste Tier 5-land', den: 'Your first Tier 5 country' },
-    { id: 'legend5', icon: '👑', need: 5, have: ofTier(5),
+    { id: 'legend5', icon: '👑', need: 5, unit: 'tier5', have: ofTier(5),
       nl: 'Echte legende', en: 'True legend', dnl: '5 landen uit Tier 5', den: '5 Tier 5 countries' },
-    { id: 'dreamer', icon: '⭐', need: 5, have: function (v) { return v.wish; },
+    { id: 'dreamer', icon: '⭐', need: 5, unit: 'wish', have: function (v) { return v.wish; },
       nl: 'Dromer', en: 'Dreamer', dnl: '5 landen op je wensenlijst', den: '5 countries on your wishlist' },
     { id: 'EU', icon: '🏰', need: continentSize('EU'), have: continentDone('EU'), nl: 'Heel Europa', en: 'All of Europe', dnl: 'Alle landen van Europa', den: 'Every country in Europe' },
     { id: 'AS', icon: '🏯', need: continentSize('AS'), have: continentDone('AS'), nl: 'Heel Azië', en: 'All of Asia', dnl: 'Alle landen van Azië', den: 'Every country in Asia' },
@@ -348,6 +358,23 @@
     { id: 'SA', icon: '🦙', need: continentSize('SA'), have: continentDone('SA'), nl: 'Heel Zuid-Amerika', en: 'All of South America', dnl: 'Alle landen van Zuid-Amerika', den: 'Every country in South America' },
     { id: 'OC', icon: '🏝️', need: continentSize('OC'), have: continentDone('OC'), nl: 'Heel Oceanië', en: 'All of Oceania', dnl: 'Alle landen van Oceanië', den: 'Every country in Oceania' },
   ];
+
+  // Family XP, computed one way everywhere (dashboard and host page).
+  // visitedLists: one array of visited country codes per family member.
+  //  - xpSum:    every member's XP added up (a country counts once per person who visited it)
+  //  - xpUnique: XP of the family's unique countries (each country counts once)
+  function familyTotals(visitedLists) {
+    var seen = {};
+    var xpSum = 0;
+    visitedLists.forEach(function (codes) {
+      xpSum += xpFor(codes);
+      codes.forEach(function (c) {
+        if (BY_CODE[c]) seen[c] = 1;
+      });
+    });
+    var unique = Object.keys(seen);
+    return { xpSum: xpSum, xpUnique: xpFor(unique), countries: unique.length };
+  }
 
   // visited: array of country codes; wish: number of wishlist entries.
   function badgesFor(visited, wish) {
@@ -358,7 +385,15 @@
     var v = { list: visited, set: set, wish: wish || 0 };
     return BADGES.map(function (b) {
       var have = Math.min(b.have(v), b.need);
-      return { id: b.id, icon: b.icon, nl: b.nl, en: b.en, dnl: b.dnl, den: b.den, have: have, need: b.need, done: have >= b.need };
+      var missing = b.have.codes
+        ? b.have.codes.filter(function (c) {
+            return !set[c];
+          })
+        : null;
+      return {
+        id: b.id, icon: b.icon, nl: b.nl, en: b.en, dnl: b.dnl, den: b.den,
+        have: have, need: b.need, done: have >= b.need, unit: b.unit || 'countries', missing: missing,
+      };
     });
   }
 
@@ -376,6 +411,7 @@
     levelFor: levelFor,
     BADGES: BADGES,
     badgesFor: badgesFor,
+    familyTotals: familyTotals,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
