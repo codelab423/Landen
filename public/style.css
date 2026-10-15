@@ -2,7 +2,8 @@
   --bg: #f1f5f4;
   --card: #ffffff;
   --text: #0f172a;
-  --muted: #64748b;
+  --muted: #556070; /* 5.8:1 on the light background */
+  --brand-text: #0f766e;
   --border: #e2e8f0;
   --brand: #0f766e;
   --brand-2: #14b8a6;
@@ -21,7 +22,8 @@
     --bg: #0b1220;
     --card: #111a2c;
     --text: #e5e7eb;
-    --muted: #94a3b8;
+    --muted: #94a3b8; /* 6.8:1 on dark cards */
+    --brand-text: #2dd4bf; /* teal text readable on dark (9.3:1) */
     --border: #1f2a40;
     --ocean: #0d1b33;
     --land: #2a3548;
@@ -53,7 +55,7 @@ textarea {
 }
 
 a {
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 .hidden {
@@ -170,8 +172,8 @@ select:focus,
 }
 
 .btn.wish {
-  background: var(--wish);
-  border-color: var(--wish);
+  background: #b45309;
+  border-color: #b45309;
   color: #fff;
 }
 
@@ -202,7 +204,7 @@ select:focus,
 .linkish {
   background: none;
   border: 0;
-  color: var(--brand);
+  color: var(--brand-text);
   cursor: pointer;
   font-weight: 600;
   padding: 0;
@@ -263,7 +265,7 @@ select:focus,
 
 .nav a.active {
   background: rgba(20, 184, 166, 0.14);
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 .top-right {
@@ -740,8 +742,8 @@ h2 {
 }
 
 .icon-btn.on-wish {
-  background: var(--wish);
-  border-color: var(--wish);
+  background: #b45309;
+  border-color: #b45309;
   color: #fff;
 }
 
@@ -918,7 +920,7 @@ td .btn + .btn {
   font-size: 11px;
   font-weight: 700;
   background: rgba(20, 184, 166, 0.15);
-  color: var(--brand);
+  color: var(--brand-text);
   margin-left: 6px;
 }
 
@@ -2214,4 +2216,36 @@ h3 {
   text-align: left;
   min-height: 44px;
   max-width: 100%;
+}
+
+/* ---------- touch targets: at least 44×44px on phones and tablets ---------- */
+
+@media (pointer: coarse) {
+  .icon-btn,
+  .zoom-btns button,
+  .avatar#profile-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .btn,
+  .btn.small,
+  .seg button,
+  .lang-toggle button,
+  .vote,
+  .check {
+    min-height: 44px;
+  }
+  .lang-toggle button {
+    min-width: 44px;
+  }
+  .linkish {
+    min-height: 44px;
+    padding: 0 6px;
+  }
+  .chip {
+    min-height: 36px;
+  }
+  .row .actions {
+    gap: 6px;
+  }
 }

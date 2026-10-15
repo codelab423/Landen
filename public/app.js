@@ -50,7 +50,7 @@
   const num = (n) => Number(n).toLocaleString(state.lang === 'nl' ? 'nl-NL' : 'en-GB');
   const cname = (c) => c[state.lang];
   const flag = (code, cls) => `<img class="flag ${cls || ''}" src="/flags/${code.toLowerCase()}.svg" alt="" loading="lazy">`;
-  const tierBadge = (tier) => `<span class="tier-badge" style="background:${L.TIERS[tier].color}">${t('tier')} ${tier} · ${L.TIERS[tier][state.lang]}</span>`;
+  const tierBadge = (tier) => `<span class="tier-badge" style="background:${L.TIERS[tier].badge}">${t('tier')} ${tier} · ${L.TIERS[tier][state.lang]}</span>`;
   // Avatar letters: one initial, or two (first + last name, e.g. AT / AR) when another
   // family member's name starts with the same letter.
   function initials(name) {
@@ -375,9 +375,9 @@
             <span>${t('mapLoading')}</span>
           </div>
           <div class="zoom-btns">
-            <button data-zoom="in" title="${t('zoomIn')}">+</button>
-            <button data-zoom="out" title="${t('zoomOut')}">−</button>
-            <button data-zoom="reset" title="${t('zoomReset')}">⟲</button>
+            <button data-zoom="in" title="${t('zoomIn')}" aria-label="${t('zoomIn')}">+</button>
+            <button data-zoom="out" title="${t('zoomOut')}" aria-label="${t('zoomOut')}">−</button>
+            <button data-zoom="reset" title="${t('zoomReset')}" aria-label="${t('zoomReset')}">⟲</button>
           </div>
         </div>
         <div class="legend" id="legend"></div>
@@ -834,10 +834,14 @@
         readOnly
           ? ''
           : c.code === L.HOME
-          ? `<div class="actions"><span class="icon-btn on-visited" title="${t('homeCountry')}">🏠</span></div>`
+          ? `<div class="actions"><span class="icon-btn on-visited" role="img" title="${t('homeCountry')}" aria-label="${t('homeCountry')}">🏠</span></div>`
           : `<div class="actions">
-        <button class="icon-btn ${st === 'visited' ? 'on-visited' : ''}" data-toggle="visited" data-code="${c.code}" title="${t('visited')}">✓</button>
-        <button class="icon-btn ${st === 'wish' ? 'on-wish' : ''}" data-toggle="wish" data-code="${c.code}" title="${t('wish')}">★</button>
+        <button class="icon-btn ${st === 'visited' ? 'on-visited' : ''}" data-toggle="visited" data-code="${c.code}"
+          title="${t(st === 'visited' ? 'unmarkVisited' : 'markVisitedLabel', { country: cname(c) })}"
+          aria-label="${t(st === 'visited' ? 'unmarkVisited' : 'markVisitedLabel', { country: cname(c) })}" aria-pressed="${st === 'visited'}"><span aria-hidden="true">✓</span></button>
+        <button class="icon-btn ${st === 'wish' ? 'on-wish' : ''}" data-toggle="wish" data-code="${c.code}"
+          title="${t(st === 'wish' ? 'unmarkWish' : 'markWishLabel', { country: cname(c) })}"
+          aria-label="${t(st === 'wish' ? 'unmarkWish' : 'markWishLabel', { country: cname(c) })}" aria-pressed="${st === 'wish'}"><span aria-hidden="true">★</span></button>
       </div>`
       }
     </div>`;
@@ -1348,7 +1352,7 @@
         ? ideas
             .map(
               (i) => `<article class="idea">
-          <button class="vote ${i.mine ? 'on' : ''}" data-vote="${i.id}" title="${t('vote')}">👍<b>${i.votes}</b></button>
+          <button class="vote ${i.mine ? 'on' : ''}" data-vote="${i.id}" title="${t('vote')}" aria-label="${t('vote')} (${i.votes})" aria-pressed="${i.mine}">👍<b>${i.votes}</b></button>
           <div class="idea-body">
             <p>${esc(i.text)}</p>
             <footer>

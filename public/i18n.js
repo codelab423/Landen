@@ -1,5 +1,9 @@
 window.I18N = {
   nl: {
+    markVisitedLabel: "{country} markeren als geweest",
+    unmarkVisited: "{country} niet meer als geweest markeren",
+    markWishLabel: "{country} op je wensenlijst zetten",
+    unmarkWish: "{country} van je wensenlijst halen",
     startHint: "Begin met een van deze voorbeelden, op basis van jullie wensenlijsten:",
     sugGoTo: "Met z’n allen naar {country}? Staat bij {n} van ons op de wensenlijst!",
     sugAskTips: "Wie geeft tips voor {country}? {name} is er al geweest!",
@@ -259,6 +263,10 @@ window.I18N = {
     err_generic: 'Er ging iets mis. Probeer het opnieuw.',
   },
   en: {
+    markVisitedLabel: "Mark {country} as visited",
+    unmarkVisited: "Unmark {country} as visited",
+    markWishLabel: "Add {country} to your wishlist",
+    unmarkWish: "Remove {country} from your wishlist",
     startHint: "Start with one of these examples, based on your wishlists:",
     sugGoTo: "All of us to {country}? It’s on {n} of our wishlists!",
     sugAskTips: "Who has tips for {country}? {name} has been there!",

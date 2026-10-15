@@ -7,11 +7,12 @@
 // Shared by the server (require) and the browser (window.LANDEN).
 (function (root) {
   var TIERS = {
-    1: { xp: 50, color: '#22c55e', nl: 'Makkelijk', en: 'Easy' },
-    2: { xp: 100, color: '#3b82f6', nl: 'Gemiddeld', en: 'Medium' },
-    3: { xp: 200, color: '#a855f7', nl: 'Avontuurlijk', en: 'Adventurous' },
-    4: { xp: 350, color: '#f97316', nl: 'Uitdagend', en: 'Challenging' },
-    5: { xp: 500, color: '#ef4444', nl: 'Legendarisch', en: 'Legendary' },
+    // color: map fill; badge: darker shade so white text on it stays readable (>= 5:1)
+    1: { xp: 50, color: '#22c55e', badge: '#15803d', nl: 'Makkelijk', en: 'Easy' },
+    2: { xp: 100, color: '#3b82f6', badge: '#1d4ed8', nl: 'Gemiddeld', en: 'Medium' },
+    3: { xp: 200, color: '#a855f7', badge: '#7e22ce', nl: 'Avontuurlijk', en: 'Adventurous' },
+    4: { xp: 350, color: '#f97316', badge: '#c2410c', nl: 'Uitdagend', en: 'Challenging' },
+    5: { xp: 500, color: '#ef4444', badge: '#b91c1c', nl: 'Legendarisch', en: 'Legendary' },
   };
 
   var CONTINENTS = {
