@@ -131,6 +131,8 @@ async function open({ databaseUrl, dataDir }) {
     // Neon closes idle connections when it scales to zero; without this the process would crash.
     pool.on('error', (err) => console.warn('Postgres idle connection closed:', err.message));
     await pool.query(SCHEMA_PG);
+    // Migrations (safe to run on every start).
+    await pool.query('ALTER TABLE countries ADD COLUMN IF NOT EXISTS visited_at TEXT');
     return {
       kind: 'postgres',
       all: async (sql, params = []) => (await pool.query(toPg(sql), params)).rows,
@@ -145,6 +147,10 @@ async function open({ databaseUrl, dataDir }) {
   fs.mkdirSync(dataDir, { recursive: true });
   const db = new DatabaseSync(path.join(dataDir, 'landen.db'));
   db.exec(SCHEMA_SQLITE);
+  // Migrations (safe to run on every start).
+  if (!db.prepare('PRAGMA table_info(countries)').all().some((c) => c.name === 'visited_at')) {
+    db.exec('ALTER TABLE countries ADD COLUMN visited_at TEXT');
+  }
   return {
     kind: 'sqlite',
     all: async (sql, params = []) => db.prepare(sql).all(...params),

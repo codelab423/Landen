@@ -3,7 +3,7 @@
 
   const L = window.LANDEN;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
-  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'ideas', 'ranking', 'admin'];
+  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'timeline', 'ideas', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
   const $toasts = document.getElementById('toasts');
@@ -216,7 +216,7 @@
     $app.innerHTML = shell(view) + '<main id="main"></main>';
     bindShell();
     const main = document.getElementById('main');
-    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
+    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, timeline: renderTimeline, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
   }
 
   function langToggle() {
@@ -297,6 +297,7 @@
       ['list', '🏆 ' + t('navList')],
       ['wish', '⭐ ' + t('navWish')],
       ['badges', '🏅 ' + t('navBadges')],
+      ['timeline', '🕒 ' + t('navTimeline')],
       ['ideas', '💡 ' + t('navIdeas')],
       ['ranking', '👨‍👩‍👧‍👦 ' + t('navRanking')],
     ];
@@ -1066,6 +1067,7 @@
 
   const WIDGET_ICONS = {
     stats: '📈',
+    next: '🎯',
     never: '🧭',
     wanted: '😍',
     everyone: '🤝',
@@ -1108,7 +1110,7 @@
     }
     if (currentView() !== 'dash') return;
     const hidden = new Set(d.hiddenWidgets || []);
-    const order = ['stats', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
+    const order = ['stats', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
     const el = document.getElementById('widgets');
     el.innerHTML = order
       .filter((k) => !hidden.has(k))
@@ -1120,7 +1122,35 @@
     el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
   }
 
+  // Badges you're closest to, with what's still missing.
+  function nextBadges(max) {
+    const s = statsFor(state.mine);
+    return s.badges
+      .filter((b) => !b.done)
+      .sort((a, b) => a.need - a.have - (b.need - b.have) || b.have / b.need - a.have / a.need)
+      .slice(0, max);
+  }
+
+  function unitLabel(n, unit) {
+    return t((n === 1 ? 'unit1_' : 'unitN_') + unit);
+  }
+
   const WIDGETS = {
+    next() {
+      const list = nextBadges(3);
+      if (!list.length) return `<p class="w-empty">${t('w_next_all')}</p>`;
+      return `<ul class="next-list">${list
+        .map((b) => {
+          const left = b.need - b.have;
+          const name = `<b>${b.icon} ${b[state.lang]}</b>`;
+          const what =
+            b.missing && b.missing.length <= 3
+              ? `${t('nextMissing', { n: left, unit: unitLabel(left, b.unit), badge: name })} <span class="chips">${b.missing.map(chip).join('')}</span>`
+              : t('nextCount', { n: left, unit: unitLabel(left, b.unit), badge: name });
+          return `<li><div>${what}</div><div class="bar" title="${b.have}/${b.need}"><i style="width:${Math.round((b.have / b.need) * 100)}%"></i></div></li>`;
+        })
+        .join('')}</ul><a class="linkish" href="#/badges">${t('allBadges')} →</a>`;
+    },
     stats(d) {
       const s = d.stats;
       const cell = (v, label) => `<div class="mini"><b>${v}</b><small>${label}</small></div>`;
@@ -1582,6 +1612,81 @@
     } catch (e) {
       toast(errText(e));
     }
+  }
+
+  // ---------- timeline ----------
+
+  // Year of a trip: the travel year if someone filled it in, otherwise the year it was ticked.
+  const tripYear = (i) => i.year || (i.visitedAt ? Number(i.visitedAt.slice(0, 4)) : null);
+
+  async function renderTimeline(main) {
+    main.innerHTML = `
+      <div class="page-head">
+        <div><h2>🕒 ${t('timelineTitle')}</h2><p class="sub">${t('timelineSub')}</p></div>
+        <label class="tl-filter">${t('timelineWho')}
+          <select id="tl-who"><option value="">${t('everyone')}</option>${state.people
+            .map((p) => `<option value="${p.id}">${esc(p.name)}</option>`)
+            .join('')}</select></label>
+      </div>
+      <div id="tl-body"><div class="empty">…</div></div>`;
+    let data;
+    try {
+      data = await api('GET', '/api/timeline');
+    } catch (e) {
+      document.getElementById('tl-body').innerHTML = `<div class="empty">${errText(e)}</div>`;
+      return;
+    }
+    if (currentView() !== 'timeline') return;
+    const sel = document.getElementById('tl-who');
+    const body = document.getElementById('tl-body');
+    const draw = () => {
+      const who = Number(sel.value) || null;
+      const items = data.items.filter((i) => !who || i.user === who);
+      const byYear = new Map();
+      items.forEach((i) => {
+        const y = tripYear(i) || 'none';
+        if (!byYear.has(y)) byYear.set(y, []);
+        byYear.get(y).push(i);
+      });
+      const years = [...byYear.keys()].sort((a, b) => (a === 'none' ? 1 : b === 'none' ? -1 : b - a));
+      if (!years.length) {
+        body.innerHTML = `<div class="card empty">${t('timelineEmpty')}</div>`;
+        return;
+      }
+      body.innerHTML = `<ol class="timeline">${years
+        .map((y) => {
+          const list = byYear.get(y);
+          const perUser = new Map();
+          list.forEach((i) => {
+            if (!perUser.has(i.user)) perUser.set(i.user, []);
+            perUser.get(i.user).push(i);
+          });
+          return `<li class="tl-year">
+            <div class="tl-dot" aria-hidden="true"></div>
+            <h3>${y === 'none' ? t('noDate') : y} <small>${t(list.length === 1 ? 'countries1' : 'countriesN', { n: list.length })} · +${num(L.xpFor(list.map((i) => i.code)))} XP</small></h3>
+            ${[...perUser.entries()]
+              .map(([uid, trips]) => {
+                const u = userById(data.users, uid);
+                return `<div class="tl-person">
+                  <span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
+                  <b>${esc(u.name)}</b><small>${trips.length}</small>
+                  <div class="chips">${trips
+                    .map((i) => {
+                      const ticked = i.visitedAt ? t('tickedOn', { date: new Date(i.visitedAt.replace(' ', 'T') + 'Z').toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB') }) : '';
+                      return `<button class="chip" data-open="${i.code}" title="${esc(ticked)}">${flag(i.code, 'sm')}${cname(L.BY_CODE[i.code])}</button>`;
+                    })
+                    .join('')}</div>
+                </div>`;
+              })
+              .join('')}
+          </li>`;
+        })
+        .join('')}</ol>
+        <p class="hint">📅 ${t('timelineHint')}</p>`;
+      body.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+    };
+    sel.onchange = draw;
+    draw();
   }
 
   // ---------- leaderboard ----------

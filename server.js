@@ -105,16 +105,16 @@ const markHomeVisitedForEveryone = () => db.run(HOME_UPSERT, [L.HOME, now(), 0, 
 const getUser = (id) => db.get('SELECT * FROM users WHERE id = ?', [id]);
 const userCount = async () => Number((await db.get('SELECT COUNT(*) AS n FROM users')).n);
 
-const toRow = (r) => ({ code: r.code, status: r.status, year: r.year, note: r.note, updatedAt: r.updated_at });
+const toRow = (r) => ({ code: r.code, status: r.status, year: r.year, note: r.note, updatedAt: r.updated_at, visitedAt: r.visited_at || null });
 
 async function countriesOf(userId) {
-  const rows = await db.all('SELECT code, status, year, note, updated_at FROM countries WHERE user_id = ? ORDER BY updated_at DESC, code', [userId]);
+  const rows = await db.all('SELECT code, status, year, note, updated_at, visited_at FROM countries WHERE user_id = ? ORDER BY updated_at DESC, code', [userId]);
   return rows.map(toRow);
 }
 
 // Everyone's countries in one query (the database may be far away, so avoid one query per person).
 async function countriesByUser() {
-  const rows = await db.all('SELECT user_id, code, status, year, note, updated_at FROM countries ORDER BY updated_at DESC, code');
+  const rows = await db.all('SELECT user_id, code, status, year, note, updated_at, visited_at FROM countries ORDER BY updated_at DESC, code');
   const byUser = new Map();
   rows.forEach((r) => {
     const id = Number(r.user_id);
@@ -296,9 +296,15 @@ app.put(
     if (y !== null && !(Number.isInteger(y) && y >= 1900 && y <= 2100)) return bad(res, 400, 'invalid_year');
     const n = typeof note === 'string' ? note.trim().slice(0, 500) : null;
     await db.run(
-      `INSERT INTO countries (user_id, code, status, year, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (user_id, code) DO UPDATE SET status = excluded.status, year = excluded.year, note = excluded.note, updated_at = excluded.updated_at`,
-      [req.user.id, code, status, y, n || null, now()]
+      // visited_at = the moment a country was ticked as visited. Editing the note or year keeps it;
+      // moving it back to the wishlist clears it.
+      `INSERT INTO countries (user_id, code, status, year, note, updated_at, visited_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, code) DO UPDATE SET status = excluded.status, year = excluded.year, note = excluded.note,
+         updated_at = excluded.updated_at,
+         visited_at = CASE WHEN excluded.status <> 'visited' THEN NULL
+                           WHEN countries.status = 'visited' THEN countries.visited_at
+                           ELSE excluded.visited_at END`,
+      [req.user.id, code, status, y, n || null, now(), status === 'visited' ? now() : null]
     );
     res.json({ countries: await countriesOf(req.user.id) });
   })

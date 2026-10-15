@@ -2061,3 +2061,97 @@ h3 {
 .wake-banner .globe-spin {
   font-size: 22px;
 }
+
+/* ---------- next badges ---------- */
+
+.next-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.next-list .chips {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.next-list .bar {
+  margin-top: 6px;
+}
+
+/* ---------- timeline ---------- */
+
+.tl-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tl-filter select {
+  width: auto;
+  min-height: 40px;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0 0 0 22px;
+  border-left: 3px solid var(--border);
+  display: grid;
+  gap: 18px;
+}
+
+.tl-year {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.tl-dot {
+  position: absolute;
+  left: -33px;
+  top: 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--grad);
+  border: 3px solid var(--bg);
+}
+
+.tl-year h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.tl-year h3 small {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.tl-person {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.tl-person small {
+  color: var(--muted);
+}
+
+.tl-person .chips {
+  grid-column: 1 / -1;
+}

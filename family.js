@@ -4,7 +4,7 @@
 
 const L = require('./public/countries.js');
 
-const WIDGETS = ['stats', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
+const WIDGETS = ['stats', 'next', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
 
 // Settings live in a key/value table as JSON.
 async function getSettings(db) {
@@ -30,19 +30,20 @@ async function setSetting(db, key, value) {
 // Everything the dashboard and the AI need, computed from the raw tables.
 async function familySnapshot(db) {
   const users = (await db.all('SELECT id, name, color FROM users ORDER BY id')).map((u) => ({ id: Number(u.id), name: u.name, color: u.color }));
-  const rows = await db.all('SELECT user_id, code, status, year, updated_at FROM countries ORDER BY updated_at DESC, code');
+  const rows = await db.all('SELECT user_id, code, status, year, updated_at, visited_at FROM countries ORDER BY updated_at DESC, code');
   const visited = new Map(users.map((u) => [u.id, []]));
   const wish = new Map(users.map((u) => [u.id, []]));
-  const recent = [];
+  const trips = []; // every visited country except home, with when it was ticked and the trip year
   rows.forEach((r) => {
     const id = Number(r.user_id);
     if (!visited.has(id) || !L.BY_CODE[r.code]) return;
     if (r.status === 'visited') {
       visited.get(id).push(r.code);
-      if (r.code !== L.HOME) recent.push({ user: id, code: r.code, at: r.updated_at });
+      if (r.code !== L.HOME) trips.push({ user: id, code: r.code, year: r.year || null, visitedAt: r.visited_at || null, at: r.visited_at || r.updated_at });
     } else wish.get(id).push(r.code);
   });
-  return { users, visited, wish, recent };
+  trips.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  return { users, visited, wish, trips };
 }
 
 function countBy(map) {
@@ -58,7 +59,7 @@ function countBy(map) {
 const byEase = (a, b) => L.BY_CODE[a].tier - L.BY_CODE[b].tier || L.BY_CODE[a].en.localeCompare(L.BY_CODE[b].en);
 
 function buildDashboard(snap) {
-  const { users, visited, wish, recent } = snap;
+  const { users, visited, wish, trips } = snap;
   const beenBy = countBy(visited);
   const wantedBy = countBy(wish);
   const allCodes = L.COUNTRIES.map((c) => c.code);
@@ -112,7 +113,8 @@ function buildDashboard(snap) {
       const all = L.COUNTRIES.filter((c) => c.continent === k);
       return { key: k, done: all.filter((c) => beenBy[c.code]).length, total: all.length };
     }),
-    recent: recent.slice(0, 8),
+    // Enough recent ticks for the dashboard to group bulk additions ("Fee added 8 countries").
+    recent: trips.slice(0, 60).map((t) => ({ user: t.user, code: t.code, at: t.at })),
   };
 }
 
@@ -144,6 +146,16 @@ function register(app, { getDb, h, requireUser, requireAdmin, bad, now }) {
       const db = getDb();
       const [snap, settings] = await Promise.all([familySnapshot(db), getSettings(db)]);
       res.json({ ...buildDashboard(snap), hiddenWidgets: settings.hiddenWidgets });
+    })
+  );
+
+  // Timeline: every visited country (except home) with its trip year and the date it was ticked.
+  app.get(
+    '/api/timeline',
+    requireUser,
+    h(async (req, res) => {
+      const snap = await familySnapshot(getDb());
+      res.json({ users: snap.users, items: snap.trips.map((t) => ({ user: t.user, code: t.code, year: t.year, visitedAt: t.visitedAt })) });
     })
   );
 
