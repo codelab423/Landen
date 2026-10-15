@@ -1,5 +1,8 @@
 window.I18N = {
   nl: {
+    deleteTitle: "{name} verwijderen?",
+    deleteText: "Weet je het zeker? Het account van {name} wordt verwijderd, samen met alle {n} landen, de wensenlijst, ideeën, stemmen en plannen. Dit kun je niet ongedaan maken.",
+    deleteConfirm: "Ja, verwijder {name}",
     markVisitedLabel: "{country} markeren als geweest",
     unmarkVisited: "{country} niet meer als geweest markeren",
     markWishLabel: "{country} op je wensenlijst zetten",
@@ -263,6 +266,9 @@ window.I18N = {
     err_generic: 'Er ging iets mis. Probeer het opnieuw.',
   },
   en: {
+    deleteTitle: "Delete {name}?",
+    deleteText: "Are you sure? {name}'s account will be deleted, together with all {n} countries, the wishlist, ideas, votes and plans. This can't be undone.",
+    deleteConfirm: "Yes, delete {name}",
     markVisitedLabel: "Mark {country} as visited",
     unmarkVisited: "Unmark {country} as visited",
     markWishLabel: "Add {country} to your wishlist",

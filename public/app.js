@@ -811,6 +811,39 @@
     return back.querySelector('.modal');
   }
 
+  // Promise-based confirmation dialog; resolves true only when the danger button is pressed.
+  function confirmModal({ icon, title, text, confirmLabel }) {
+    return new Promise((resolve) => {
+      const m = openModal(`
+        <div class="modal-head"><span style="font-size:36px" aria-hidden="true">${icon || '⚠️'}</span><div><h3 id="cm-title">${title}</h3></div></div>
+        <p class="confirm-text">${text}</p>
+        <div class="modal-foot">
+          <span></span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn" id="cm-cancel">${t('cancel')}</button>
+            <button class="btn danger-solid" id="cm-ok">${confirmLabel}</button>
+          </div>
+        </div>`);
+      m.setAttribute('aria-labelledby', 'cm-title');
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        observer.disconnect();
+        closeModal();
+        resolve(v);
+      };
+      // Closing the dialog any other way (Esc, clicking outside) counts as "cancel".
+      const observer = new MutationObserver(() => {
+        if (!$modalRoot.contains(m)) finish(false);
+      });
+      observer.observe($modalRoot, { childList: true });
+      m.querySelector('#cm-cancel').onclick = () => finish(false);
+      m.querySelector('#cm-ok').onclick = () => finish(true);
+      m.querySelector('#cm-cancel').focus(); // the safe choice has focus
+    });
+  }
+
   function closeModal() {
     $modalRoot.innerHTML = '';
   }
@@ -1889,7 +1922,13 @@
       (b) =>
         (b.onclick = async () => {
           const u = byId(b.dataset.del);
-          if (!confirm(t('confirmDelete', { name: u.name }))) return;
+          const ok = await confirmModal({
+            icon: '🗑️',
+            title: t('deleteTitle', { name: esc(u.name) }),
+            text: t('deleteText', { name: `<b>${esc(u.name)}</b>`, n: u.visited }),
+            confirmLabel: t('deleteConfirm', { name: esc(u.name) }),
+          });
+          if (!ok) return;
           await api('DELETE', `/api/admin/users/${u.id}`);
           if (state.viewingId === u.id) state.viewingId = null;
           loadPeople();

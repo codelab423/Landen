@@ -32,6 +32,8 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
   nog niemand was, "vraag het aan…" (iemand wil ergens heen waar een ander al was), populairste landen, iedereen
   geweest, zeldzaamste trofeeën, "alleen ik!", per werelddeel en de laatste reizen. Iedereen ziet het; de host
   kiest via **Dashboard beheren** welke onderdelen zichtbaar zijn.
+- **Tijdlijn**: per jaar welke landen erbij kwamen, per familielid (reisjaar als dat is ingevuld, anders de datum van aanvinken).
+- **Volgende badges**: het dashboard laat zien welke badges je bijna hebt en wat er nog mist.
 - **Ideeën & plannen**: deel reisideeën, stem met 👍, en bewaar reisplannen voor de hele familie.
 - **Familie-AI**: werkt **gratis** via je eigen claude.ai-account (de app kopieert je vraag mét alle familiedata en opent Claude; het antwoord plak je terug als plan of idee). Optioneel, en dan kost het geld: direct in de app, als reismaatje dat alle landen, wensenlijsten en ideeën kent. Het helpt plannen
   maken, en je kunt een antwoord met één klik bewaren als plan of delen als idee.
@@ -63,6 +65,7 @@ npm start
 | `ANTHROPIC_API_KEY` | Zet de Familie-AI aan (key van [console.anthropic.com](https://console.anthropic.com)) | *(uit)* |
 | `AI_MODEL` | Welk Claude-model de AI gebruikt | `claude-opus-5-5` |
 | `AI_DAILY_LIMIT` | Max. aantal AI-vragen per persoon per dag | `30` |
+| `KEEP_ALIVE` | `1` = de server pingt zichzelf elke 10 minuten, zodat Render hem niet laat slapen | *(uit)* |
 
 ## Gratis online zetten: Render + Neon
 
@@ -86,7 +89,8 @@ daarom staat de data in Neon).
 **Goed om te weten**
 - Op het gratis plan valt de website na 15 minuten zonder bezoekers in slaap. De eerstvolgende bezoeker wacht
   dan ongeveer een minuut. Wil je dat niet: maak een gratis taak op [cron-job.org](https://cron-job.org) die elke
-  10 minuten `https://<jouw-link>/healthz` opent. Het gratis plan heeft 750 uur per maand, genoeg om 24/7 aan te staan.
+  10 minuten `https://<jouw-link>/healthz` opent, of zet in Render `KEEP_ALIVE=1`. Het gratis plan heeft 750 uur per
+  maand, genoeg om 24/7 aan te staan. Wordt de server toch wakker, dan toont de app "De server wordt wakker…".
 - Nieuwe versies van de code (push naar `main`) worden automatisch online gezet.
 
 ## Familie-AI direct in de app (optioneel, kost geld)
@@ -115,3 +119,7 @@ docker run -d -p 3000:3000 -v landen-data:/data -e FAMILY_CODE=geheim landen
 
 - Backend: Express + Postgres (`pg`) of `node:sqlite`, scrypt-wachtwoorden, sessie-cookies (HttpOnly).
 - Frontend: geen build-stap; vanilla JS + d3 (kaart) + topojson + world-atlas + flag-icons.
+- De wereldkaart (`public/data/world.json`) is een vereenvoudigde versie van Natural Earth 1:10m (alle 195 landen,
+  kleine landen op volle detail). Opnieuw maken: `npm run build:map`.
+- Beveiliging: alle `/api/admin/*`-routes zijn op de server alleen voor de host; e-mailadressen van anderen ziet
+  alleen de host.

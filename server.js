@@ -185,7 +185,12 @@ app.use(
 );
 
 const requireUser = (req, res, next) => (req.user ? next() : bad(res, 401, 'not_logged_in'));
+// The host check reads is_admin from the database on every request, so a demoted host loses access at once.
 const requireAdmin = (req, res, next) => (req.user && req.user.is_admin ? next() : bad(res, 403, 'forbidden'));
+
+// Safety net: everything under /api/admin is host-only, including routes added later
+// (registered by family.js) even if someone forgets requireAdmin on them.
+app.use('/api/admin', requireAdmin);
 
 app.get(
   '/api/config',
@@ -419,6 +424,9 @@ const family = require('./family.js').register(app, { getDb: () => db, h, requir
 require('./ai.js').register(app, { h, requireUser, bad, family });
 
 app.get('/healthz', (req, res) => res.send('ok'));
+
+// Unknown API paths are a JSON 404, not the HTML page.
+app.use('/api', (req, res) => bad(res, 404, 'not_found'));
 
 // ---------- static ----------
 

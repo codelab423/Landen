@@ -2249,3 +2249,45 @@ h3 {
     gap: 6px;
   }
 }
+
+/* ---------- confirmation dialog ---------- */
+
+.confirm-text {
+  margin: 0 0 16px;
+  line-height: 1.55;
+}
+
+.btn.danger-solid {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.btn.danger-solid:hover {
+  filter: brightness(1.08);
+}
+
+/* ---------- compact navigation (9 items must fit on a laptop) ---------- */
+
+.nav {
+  gap: 2px;
+}
+
+.nav a {
+  padding: 7px 9px;
+  font-size: 14px;
+}
+
+@media (max-width: 1250px) and (min-width: 761px) {
+  .topbar-inner {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .top-right {
+    margin-left: auto;
+  }
+}
