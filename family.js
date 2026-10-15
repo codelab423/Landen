@@ -65,7 +65,6 @@ function buildDashboard(snap) {
   const familyVisited = Object.keys(beenBy);
   const n = users.length;
 
-  const xpOf = (id) => L.xpFor(visited.get(id));
   const totalBadges = users.reduce((s, u) => s + L.badgesFor(visited.get(u.id), wish.get(u.id).length).filter((b) => b.done).length, 0);
 
   // Wishes someone else in the family can tell you about.
@@ -91,9 +90,7 @@ function buildDashboard(snap) {
     users,
     stats: {
       members: n,
-      countries: familyVisited.length,
-      xp: users.reduce((s, u) => s + xpOf(u.id), 0),
-      familyXp: L.xpFor(familyVisited),
+      ...L.familyTotals(users.map((u) => visited.get(u.id))),
       badges: totalBadges,
       wishes: Object.keys(wantedBy).length,
     },

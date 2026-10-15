@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
-    "dev": "node --watch --disable-warning=ExperimentalWarning server.js"
+    "dev": "node --watch --disable-warning=ExperimentalWarning server.js",
+    "build:map": "node scripts/build-map.js"
   },
   "repository": {
     "type": "git",
@@ -28,5 +29,8 @@
   "private": true,
   "engines": {
     "node": ">=22.13"
+  },
+  "devDependencies": {
+    "topojson-simplify": "^3.0.3"
   }
 }

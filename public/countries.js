@@ -349,6 +349,23 @@
     { id: 'OC', icon: '🏝️', need: continentSize('OC'), have: continentDone('OC'), nl: 'Heel Oceanië', en: 'All of Oceania', dnl: 'Alle landen van Oceanië', den: 'Every country in Oceania' },
   ];
 
+  // Family XP, computed one way everywhere (dashboard and host page).
+  // visitedLists: one array of visited country codes per family member.
+  //  - xpSum:    every member's XP added up (a country counts once per person who visited it)
+  //  - xpUnique: XP of the family's unique countries (each country counts once)
+  function familyTotals(visitedLists) {
+    var seen = {};
+    var xpSum = 0;
+    visitedLists.forEach(function (codes) {
+      xpSum += xpFor(codes);
+      codes.forEach(function (c) {
+        if (BY_CODE[c]) seen[c] = 1;
+      });
+    });
+    var unique = Object.keys(seen);
+    return { xpSum: xpSum, xpUnique: xpFor(unique), countries: unique.length };
+  }
+
   // visited: array of country codes; wish: number of wishlist entries.
   function badgesFor(visited, wish) {
     var set = {};
@@ -376,6 +393,7 @@
     levelFor: levelFor,
     BADGES: BADGES,
     badgesFor: badgesFor,
+    familyTotals: familyTotals,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

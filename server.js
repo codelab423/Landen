@@ -16,6 +16,41 @@ const SESSION_DAYS = 60;
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7'];
 const OLD_DEFAULT_RED = '#e11d48';
 
+// Every family member gets their own colour: palette first, then evenly spread extra hues.
+function freeColor(taken) {
+  const used = new Set(taken.map((c) => String(c).toLowerCase()));
+  const fromPalette = COLORS.find((c) => !used.has(c));
+  if (fromPalette) return fromPalette;
+  for (let i = 0; i < 360; i++) {
+    const hue = Math.round((i * 137.508) % 360);
+    const c = hslToHex(hue, 65, 45);
+    if (!used.has(c)) return c;
+  }
+  return '#64748b';
+}
+
+function hslToHex(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return '#' + [f(0), f(8), f(4)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+// Older accounts could share a colour; give every later duplicate a free one.
+async function dedupeColors() {
+  const users = await db.all('SELECT id, color FROM users ORDER BY id');
+  const kept = [];
+  for (const u of users) {
+    if (kept.includes(String(u.color).toLowerCase())) {
+      const c = freeColor([...kept, ...users.map((x) => x.color)]);
+      await db.run('UPDATE users SET color = ? WHERE id = ?', [c, u.id]);
+      kept.push(c);
+    } else kept.push(String(u.color).toLowerCase());
+  }
+}
+
 let db; // set in start()
 
 // ---------- helpers ----------
@@ -155,7 +190,7 @@ const requireAdmin = (req, res, next) => (req.user && req.user.is_admin ? next()
 app.get(
   '/api/config',
   h(async (req, res) => {
-    res.json({ needsFamilyCode: !!FAMILY_CODE, firstUser: (await userCount()) === 0 });
+    res.json({ needsFamilyCode: !!FAMILY_CODE, firstUser: (await userCount()) === 0, mapVersion: MAP_VERSION });
   })
 );
 
@@ -176,7 +211,7 @@ app.post(
 
     const count = await userCount();
     const isAdmin = count === 0 || (ADMIN_EMAIL && mail === ADMIN_EMAIL) ? 1 : 0;
-    const color = COLORS[count % COLORS.length];
+    const color = freeColor((await db.all('SELECT color FROM users')).map((r) => r.color));
     const row = await db.get(
       'INSERT INTO users (email, name, password_hash, color, lang, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
       [mail, cleanName(name), hashPassword(password), color, lang === 'en' ? 'en' : 'nl', isAdmin, now()]
@@ -228,6 +263,9 @@ app.patch(
     const u = req.user;
     if (name !== undefined && !cleanName(name)) return bad(res, 400, 'name_required');
     if (color !== undefined && !isColor(color)) return bad(res, 400, 'invalid_color');
+    if (color !== undefined && (await db.get('SELECT 1 AS x FROM users WHERE LOWER(color) = ? AND id != ?', [color.toLowerCase(), u.id]))) {
+      return bad(res, 409, 'color_taken');
+    }
     if (newPassword !== undefined) {
       if (typeof currentPassword !== 'string' || !checkPassword(currentPassword, u.password_hash)) {
         return bad(res, 401, 'wrong_password');
@@ -274,6 +312,15 @@ app.delete(
     if (code === L.HOME) return bad(res, 400, 'home_country');
     await db.run('DELETE FROM countries WHERE user_id = ? AND code = ?', [req.user.id, code]);
     res.json({ countries: await countriesOf(req.user.id) });
+  })
+);
+
+// Names and colours of the whole family (never e-mail addresses), for avatars.
+app.get(
+  '/api/people',
+  requireUser,
+  h(async (req, res) => {
+    res.json({ people: (await db.all('SELECT id, name, color FROM users ORDER BY id')).map((u) => ({ id: Number(u.id), name: u.name, color: u.color })) });
   })
 );
 
@@ -373,8 +420,16 @@ const mod = (...p) => path.join(__dirname, 'node_modules', ...p);
 const vendor = {
   '/vendor/d3.min.js': mod('d3', 'dist', 'd3.min.js'),
   '/vendor/topojson-client.min.js': mod('topojson-client', 'dist', 'topojson-client.min.js'),
-  '/data/world.json': mod('world-atlas', 'countries-10m.json'),
 };
+// The simplified world map (scripts/build-map.js). Its URL carries a content hash,
+// so browsers may keep it for a year and only fetch it again when the map changes.
+const MAP_FILE = path.join(__dirname, 'public', 'data', 'world.json');
+const MAP_VERSION = crypto.createHash('sha1').update(require('fs').readFileSync(MAP_FILE)).digest('hex').slice(0, 10);
+app.get('/data/world.json', (req, res) => {
+  res.set('Cache-Control', req.query.v === MAP_VERSION ? 'public, max-age=31536000, immutable' : 'no-cache');
+  res.sendFile(MAP_FILE);
+});
+
 Object.entries(vendor).forEach(([url, file]) => {
   app.get(url, (req, res) => res.sendFile(file, { maxAge: '30d' }));
 });
@@ -393,8 +448,17 @@ async function start() {
   await markHomeVisitedForEveryone();
   // Red was the first auto-assigned colour and nobody liked it; move those accounts to the new default.
   await db.run('UPDATE users SET color = ? WHERE color = ?', [COLORS[0], OLD_DEFAULT_RED]);
+  await dedupeColors();
   // Clean expired sessions once in a while.
   setInterval(() => db.run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]).catch(() => {}), 3600 * 1000).unref();
+  // Optional: KEEP_ALIVE=1 pings the public URL every 10 minutes so Render's free plan
+  // doesn't put the site to sleep (one service running 24/7 fits in the free 750 hours).
+  const selfUrl = process.env.RENDER_EXTERNAL_URL;
+  if (process.env.KEEP_ALIVE === '1' && selfUrl) {
+    setInterval(() => fetch(selfUrl + '/healthz').catch(() => {}), 10 * 60 * 1000).unref();
+    console.log('Keep-alive: aan');
+  }
+
   app.listen(PORT, () => {
     console.log(`Landen draait op http://localhost:${PORT} (database: ${db.kind})`);
     console.log(`Familie-AI: ${process.env.ANTHROPIC_API_KEY ? 'aan' : 'uit (geen ANTHROPIC_API_KEY)'}`);
