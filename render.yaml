@@ -5,8 +5,11 @@ services:
     name: landen
     runtime: node
     plan: free
-    buildCommand: npm ci
+    # npm test = smoke test (scripts/smoke-test.js) on a throwaway database: if it fails,
+    # the build fails and the current version stays live.
+    buildCommand: npm ci && npm test
     startCommand: npm start
+    # Render only switches to a new version once /healthz answers 200 (server + database ok).
     healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION

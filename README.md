@@ -55,6 +55,7 @@ Nodig: **Node.js 22.13 of nieuwer**.
 npm install
 npm start
 # → http://localhost:3000
+npm test   # smoke-test
 ```
 
 ## Instellingen (environment variables)
@@ -96,6 +97,10 @@ daarom staat de data in Neon).
   10 minuten `https://<jouw-link>/healthz` opent, of zet in Render `KEEP_ALIVE=1`. Het gratis plan heeft 750 uur per
   maand, genoeg om 24/7 aan te staan. Wordt de server toch wakker, dan toont de app "De server wordt wakker…".
 - Nieuwe versies van de code (push naar `main`) worden automatisch online gezet.
+- Voor elke deploy draait Render `npm test` (een smoke-test: alle bestanden aanwezig en in git, server start,
+  `/healthz`, kaartdata, inloggen en de belangrijkste pagina's). Faalt die, dan blijft de vorige versie online en
+  krijg je een mail. Render zet een nieuwe versie pas live als `/healthz` 200 geeft. Ontbreekt er bij het starten
+  een bestand, dan staat in de log precies welk.
 
 ## Familie-AI direct in de app (optioneel, kost geld)
 
