@@ -2,6 +2,7 @@
   'use strict';
 
   const L = window.LANDEN;
+  const CLIMATE = window.CLIMATE;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
   const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'timeline', 'ideas', 'ranking', 'admin'];
   const $app = document.getElementById('app');
@@ -51,6 +52,51 @@
   const cname = (c) => c[state.lang];
   const flag = (code, cls) => `<img class="flag ${cls || ''}" src="/flags/${code.toLowerCase()}.svg" alt="" loading="lazy">`;
   const tierBadge = (tier) => `<span class="tier-badge" style="background:${L.TIERS[tier].badge}">${t('tier')} ${tier} · ${L.TIERS[tier][state.lang]}</span>`;
+  // Month names from the browser, e.g. 'mei' / 'May' (short) and 'juli' / 'July' (long).
+  const monthName = (m, style) =>
+    new Date(2020, m, 15).toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB', { month: style || 'short' }).replace('.', '');
+
+  // "mei–sep" / "nov–mrt, jul" for the best travel months of a country.
+  function bestTimeLabel(code) {
+    const ranges = CLIMATE.bestRanges(code);
+    if (!ranges.length) return '';
+    const b = CLIMATE.bestMonths(code);
+    if (b.months.length >= 10) return t('allYear');
+    return ranges.map((r) => (r[0] === r[1] ? monthName(r[0]) : `${monthName(r[0])}–${monthName(r[1])}`)).join(', ');
+  }
+
+  // Twelve small bars: temperature (height + colour) and rain, best months highlighted.
+  function climateChart(code) {
+    const d = CLIMATE.DATA[code];
+    if (!d) return '';
+    const best = new Set(CLIMATE.bestMonths(code).months);
+    const tempColor = (v) => (v < 5 ? '#60a5fa' : v < 15 ? '#34d399' : v < 25 ? '#fbbf24' : '#f97316');
+    const cols = d[1]
+      .map((temp, m) => {
+        const rain = d[2][m];
+        const th = Math.max(4, Math.min(100, ((temp + 10) / 45) * 100));
+        const rh = Math.max(2, Math.min(100, (rain / 300) * 100));
+        const label = `${monthName(m, 'long')}: ${String(temp).replace('.', state.lang === 'nl' ? ',' : '.')} °C · ${rain} mm`;
+        return `<div class="cl-col ${best.has(m) ? 'best' : ''}" title="${label}" aria-label="${label}">
+          <div class="cl-bars"><i class="cl-t" style="height:${th}%;background:${tempColor(temp)}"></i><i class="cl-r" style="height:${rh}%"></i></div>
+          <span class="cl-temp">${Math.round(temp)}°</span><span class="cl-m">${monthName(m).slice(0, 3)}</span></div>`;
+      })
+      .join('');
+    return `<section class="climate">
+      <header><b>🌦️ ${t('climateIn', { city: esc(CLIMATE.city(code, state.lang)) })}</b><span class="pill best-pill">☀️ ${t('bestTime')}: ${bestTimeLabel(code)}</span></header>
+      <div class="cl-chart">${cols}</div>
+      <small class="cl-legend"><i class="dot-t"></i> ${t('tempLegend')} <i class="dot-r"></i> ${t('rainLegend')} · ${t('climateNote')}</small>
+    </section>`;
+  }
+
+  // Wishlist line: "☀️ Beste maand: juli · nu!" (when this month is one of the best months).
+  function bestMonthLine(code) {
+    if (!CLIMATE.DATA[code]) return '';
+    const b = CLIMATE.bestMonths(code);
+    const now = b.months.includes(new Date().getMonth());
+    return `<small class="best-month">☀️ ${t('bestMonth')}: <b>${monthName(b.top, 'long')}</b> <span class="muted">(${bestTimeLabel(code)})</span>${now ? ` <span class="pill now-pill">${t('goodNow')}</span>` : ''}</small>`;
+  }
+
   // Avatar letters: one initial, or two (first + last name, e.g. AT / AR) when another
   // family member's name starts with the same letter.
   function initials(name) {
@@ -672,7 +718,8 @@
         status += '<br>' + names.map(esc).join(', ');
       }
     }
-    $tooltip.innerHTML = `<b>${cname(c)}</b>${tierBadge(c.tier)} <strong>${c.xp} XP</strong><div style="margin-top:4px;color:var(--muted)">${status}</div>`;
+    $tooltip.innerHTML = `<b>${cname(c)}</b>${tierBadge(c.tier)} <strong>${c.xp} XP</strong><div style="margin-top:4px;color:var(--muted)">${status}</div>
+      <div style="margin-top:2px;color:var(--muted)">☀️ ${t('bestTime')}: ${bestTimeLabel(c.code)}</div>`;
     $tooltip.hidden = false;
     const pad = 14;
     let x = ev.clientX + pad;
@@ -700,6 +747,7 @@
     if (v.readOnly) {
       openModal(`
         <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
+        ${climateChart(code)}
         <p><b>${esc(v.user.name)}:</b> ${row ? (row.status === 'visited' ? '✅ ' + t('visited') : '⭐ ' + t('wish')) : t('notVisited')}
         ${row && row.year ? ' · ' + row.year : ''}</p>
         ${row && row.note ? `<p style="white-space:pre-wrap">${esc(row.note)}</p>` : ''}
@@ -709,6 +757,7 @@
 
     const m = openModal(`
       <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
+        ${climateChart(code)}
       ${
         home
           ? `<div class="hint">🏠 ${t('homeCountry')}</div>`
@@ -985,7 +1034,7 @@
                 const row = v.map.get(c.code);
                 return `<div class="row wish">
                 ${flag(c.code)}
-                <div class="info" data-open="${c.code}"><b>${cname(c)}</b><small>${L.CONTINENTS[c.continent][state.lang]}${row.note ? ' · ' + esc(row.note) : ''}</small></div>
+                <div class="info" data-open="${c.code}"><b>${cname(c)}</b><small>${L.CONTINENTS[c.continent][state.lang]}${row.note ? ' · ' + esc(row.note) : ''}</small>${bestMonthLine(c.code)}</div>
                 ${tierBadge(c.tier)}<span class="xp">+${c.xp} XP</span>
                 ${v.readOnly ? '' : `<button class="btn small primary" data-toggle="visited" data-code="${c.code}">✅ ${t('markVisited')}</button>`}
               </div>`;
