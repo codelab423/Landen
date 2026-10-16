@@ -27,7 +27,8 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
 - **Wensenlijst**: landen waar je nog heen wilt, met hoeveel XP ze opleveren.
 - **Beste reistijd**: per land 12 balkjes met gemiddelde temperatuur en neerslag, de beste maanden gemarkeerd
   ("Beste tijd: mei–sep"); op de wensenlijst de beste maand om te gaan. Indicatieve klimaatgemiddelden per
-  (hoofd)stad in [`public/climate.js`](public/climate.js).
+  (hoofd)stad in [`public/climate.js`](public/climate.js); het landvenster zegt op welke stad het is gebaseerd.
+  Grote landen (Brazilië, VS, Rusland, China, Australië, Canada, India, Argentinië, Mexico) hebben 3 regio's.
 - **Badges**: 22 prestaties om vrij te spelen (Benelux, G7, alle werelddelen, heel Europa, …).
 - **Familiekaart**: hoe meer familieleden in een land zijn geweest, hoe donkerder het land. De host ziet ook wíe.
 - **🎲 Verras me**: kiest een willekeurig land waar je nog niet bent geweest (wensenlijst-landen vaker).
