@@ -8,21 +8,10 @@ const L = require('./public/countries.js');
 const fs = require('fs');
 const database = require('./db.js');
 
-// Files the app cannot run without. If one is missing (e.g. not committed because of
-// .gitignore), stop right away with a clear message instead of a half-working site.
-const REQUIRED_FILES = [
-  'public/index.html',
-  'public/app.js',
-  'public/i18n.js',
-  'public/countries.js',
-  'public/climate.js',
-  'public/style.css',
-  'public/sw.js',
-  'public/data/world.json',
-  'node_modules/d3/dist/d3.min.js',
-  'node_modules/topojson-client/dist/topojson-client.min.js',
-  'node_modules/flag-icons/flags/4x3/nl.svg',
-];
+const { APP_FILES, PACKAGE_FILES } = require('./required-files.js');
+
+// Stop right away with a clear message when a required file is missing, instead of a half-working site.
+const REQUIRED_FILES = [...APP_FILES, ...PACKAGE_FILES];
 const missing = REQUIRED_FILES.filter((f) => !fs.existsSync(path.join(__dirname, f)));
 if (missing.length) {
   console.error('FOUT: Landen kan niet starten, deze bestanden ontbreken:\n' + missing.map((f) => '  - ' + f).join('\n'));
@@ -36,7 +25,7 @@ const hashFiles = (files) => {
   return hash.digest('hex').slice(0, 10);
 };
 // One id for the whole front end; changes whenever any app file changes.
-const BUILD = hashFiles(REQUIRED_FILES.filter((f) => f.startsWith('public/')).map((f) => path.join(__dirname, f)));
+const BUILD = hashFiles(APP_FILES.map((f) => path.join(__dirname, f)));
 
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -471,7 +460,19 @@ app.delete(
 const family = require('./family.js').register(app, { getDb: () => db, h, requireUser, requireAdmin, bad, now });
 require('./ai.js').register(app, { h, requireUser, bad, family });
 
-app.get('/healthz', (req, res) => res.send('ok'));
+// Render's health check: the web server answers and the database is reachable.
+app.get(
+  '/healthz',
+  h(async (req, res) => {
+    try {
+      await db.get('SELECT 1 AS ok');
+      res.send('ok');
+    } catch (e) {
+      console.error('Health check: database niet bereikbaar:', e.message);
+      res.status(503).send('database unavailable');
+    }
+  })
+);
 
 // Unknown API paths are a JSON 404, not the HTML page.
 app.use('/api', (req, res) => bad(res, 404, 'not_found'));

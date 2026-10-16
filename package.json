@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
     "dev": "node --watch --disable-warning=ExperimentalWarning server.js",
-    "build:map": "node scripts/build-map.js"
+    "build:map": "node scripts/build-map.js",
+    "test": "node --disable-warning=ExperimentalWarning scripts/smoke-test.js"
   },
   "repository": {
     "type": "git",
