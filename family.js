@@ -3,8 +3,9 @@
 // Family-wide features: dashboard, ideas board, plans and host settings.
 
 const L = require('./public/countries.js');
+const challenges = require('./challenges.js');
 
-const WIDGETS = ['stats', 'next', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
+const WIDGETS = ['stats', 'challenge', 'next', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
 
 // Settings live in a key/value table as JSON.
 async function getSettings(db) {
@@ -169,8 +170,9 @@ function register(app, { getDb, h, requireUser, requireAdmin, bad, now }) {
     requireUser,
     h(async (req, res) => {
       const db = getDb();
-      const [snap, settings] = await Promise.all([familySnapshot(db), getSettings(db)]);
-      res.json({ ...buildDashboard(snap), hiddenWidgets: settings.hiddenWidgets });
+      await challenges.settle(db).catch((e) => console.warn('Challenge:', e.message));
+      const [snap, settings, challenge, bonus] = await Promise.all([familySnapshot(db), getSettings(db), challenges.status(db), challenges.challengeBonus(db)]);
+      res.json({ ...buildDashboard(snap), challenge, bonus: Object.fromEntries(bonus), hiddenWidgets: settings.hiddenWidgets });
     })
   );
 

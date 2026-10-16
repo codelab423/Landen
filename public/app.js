@@ -1190,6 +1190,7 @@
 
   const WIDGET_ICONS = {
     stats: '📈',
+    challenge: '🏁',
     next: '🎯',
     never: '🧭',
     wanted: '😍',
@@ -1233,7 +1234,7 @@
     }
     if (currentView() !== 'dash') return;
     const hidden = new Set(d.hiddenWidgets || []);
-    const order = ['stats', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
+    const order = ['stats', 'challenge', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
     const el = document.getElementById('widgets');
     el.innerHTML = order
       .filter((k) => !hidden.has(k))
@@ -1259,6 +1260,36 @@
   }
 
   const WIDGETS = {
+    // This month's family challenge: winner, or standings, plus last month's winner.
+    challenge(d) {
+      const c = d.challenge;
+      if (!c) return '';
+      const face = (id) => {
+        const u = userById(d.users, id);
+        return `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+      };
+      const who = (id) => esc(userById(d.users, id).name);
+      const prize = (n) => `<span class="pill bonus-pill">🎁 +${num(n)} ${t('bonusXp')}</span>`;
+      const scoreText = (id, n) => (id === 'most_xp' ? `${num(n)} XP` : t(n === 1 ? 'countries1' : 'countriesN', { n }));
+      let body;
+      if (c.winner) {
+        body = `<p class="ch-win">🏆 ${face(c.winner.user)} <b>${who(c.winner.user)}</b> ${c.winner.code ? `${t('chWonWith')} ${chip(c.winner.code)}` : t('chWon')}</p>`;
+      } else if (c.kind === 'most' && c.standings && c.standings.length) {
+        body = `<ol class="ch-standings">${c.standings
+          .map((s, i) => `<li>${['🥇', '🥈', '🥉'][i] || i + 1} ${face(s.user)} <b>${who(s.user)}</b><span class="spacer"></span>${scoreText(c.id, s.score)}</li>`)
+          .join('')}</ol>`;
+      } else body = `<p class="w-empty">⏳ ${t(c.kind === 'most' ? 'chNobodyYet' : 'chBeFirst')}</p>`;
+      const mine = (d.bonus && d.bonus[state.me.id]) || 0;
+      return `<div class="ch-card">
+          <h4>${t('ch_' + c.id)}</h4>
+          <p class="ch-meta">${prize(c.bonus)} <small>${
+            c.winner ? t('chDecided') : c.kind === 'most' ? t('chEndsIn', { n: c.daysLeft + 1 }) : t('chUntil', { n: c.daysLeft + 1 })
+          }</small></p>
+          ${body}
+        </div>
+        ${c.last ? `<p class="ch-last"><small>${t('chLastMonth')}:</small> ${face(c.last.user)} <b>${who(c.last.user)}</b> — ${t('ch_' + c.last.id)} (+${num(c.last.bonus)})</p>` : ''}
+        <p class="ch-last"><small>${t('chYourBonus', { n: num(mine) })}</small></p>`;
+    },
     next() {
       const list = nextBadges(3);
       if (!list.length) return `<p class="w-empty">${t('w_next_all')}</p>`;
@@ -2015,12 +2046,14 @@
           <span class="avatar" style="background:${esc(u.color)};cursor:default" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
           <div class="who"><b>${esc(u.name)}${u.id === state.me.id ? ` <span class="pill">${t('you')}</span>` : ''}</b>
             <small>${t('level')} ${lvl.index} · ${lvl.level[state.lang]} · ${u.visited} ${t('countries')} · 🏅 ${u.badges} · ⭐ ${u.wish}</small>
+            ${u.bonusXp ? `<span class="pill bonus-pill" title="${esc(t('bonusApart'))}">🎁 +${num(u.bonusXp)} ${t('bonusXp')}</span>` : ''}
             <div class="bar"><i style="width:${Math.round((u.visited / 195) * 100)}%;background:${esc(u.color)}"></i></div></div>
           <div class="score">${num(u.xp)} XP<small>${Math.round((u.visited / 195) * 100)}% ${t('ofWorld')}</small></div>
         </div>`;
           })
           .join('')
       : `<div class="empty">${t('rankingEmpty')}</div>`;
+    if (board.some((u) => u.bonusXp)) main.querySelector('#lb').insertAdjacentHTML('beforeend', `<p class="hint">🎁 ${t('bonusApart')}</p>`);
   }
 
   // ---------- admin ----------

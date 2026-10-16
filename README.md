@@ -37,7 +37,10 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
   geweest, zeldzaamste trofeeën, "alleen ik!", per werelddeel en de laatste reizen. Iedereen ziet het; de host
   kiest via **Dashboard beheren** welke onderdelen zichtbaar zijn.
 - **Tijdlijn**: per jaar welke landen erbij kwamen, per familielid (reisjaar als dat is ingevuld, anders de datum van aanvinken).
-- **Volgende badges**: het dashboard laat zien welke badges je bijna hebt en wat er nog mist.
+- **Bijna!**: het dashboard laat zien welke badges je bijna hebt en wat er nog mist.
+- **Maand-challenge**: elke maand automatisch een familie-wedstrijd (bv. "Eerste die een Tier 3-land aanvinkt",
+  "Wie vinkt deze maand de meeste landen aan?") met bonus-XP voor de winnaar. Bonus-XP staat apart en telt niet mee
+  voor levels, badges of de ranglijst. Zie [`challenges.js`](challenges.js).
 - **Ideeën & plannen**: deel reisideeën, stem met 👍, en bewaar reisplannen voor de hele familie.
 - **Familie-AI**: werkt **gratis** via je eigen claude.ai-account (de app kopieert je vraag mét alle familiedata en opent Claude; het antwoord plak je terug als plan of idee). Optioneel, en dan kost het geld: direct in de app, als reismaatje dat alle landen, wensenlijsten en ideeën kent. Het helpt plannen
   maken, en je kunt een antwoord met één klik bewaren als plan of delen als idee.

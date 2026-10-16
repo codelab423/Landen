@@ -7,6 +7,7 @@ const compression = require('compression');
 const L = require('./public/countries.js');
 const fs = require('fs');
 const database = require('./db.js');
+const challenges = require('./challenges.js');
 
 const { APP_FILES, PACKAGE_FILES } = require('./required-files.js');
 
@@ -331,6 +332,8 @@ app.put(
                            ELSE excluded.visited_at END`,
       [req.user.id, code, status, y, n || null, now(), status === 'visited' ? now() : null]
     );
+    // A tick can win this month's challenge; never let that break saving.
+    if (status === 'visited') await challenges.settle(db).catch((e) => console.warn('Challenge:', e.message));
     res.json({ countries: await countriesOf(req.user.id) });
   })
 );
@@ -379,7 +382,9 @@ app.get(
   h(async (req, res) => {
     const users = await db.all('SELECT id, name, color FROM users ORDER BY id');
     const byUser = await countriesByUser();
-    const board = users.map((u) => ({ id: u.id, name: u.name, color: u.color, ...statsOf(byUser.get(u.id) || []) }));
+    const bonus = await challenges.challengeBonus(db);
+    // bonusXp (challenges) is shown apart and never counts for the ranking.
+    const board = users.map((u) => ({ id: u.id, name: u.name, color: u.color, ...statsOf(byUser.get(u.id) || []), bonusXp: bonus.get(Number(u.id)) || 0 }));
     board.sort((a, b) => b.xp - a.xp || b.visited - a.visited);
     res.json({ board });
   })
