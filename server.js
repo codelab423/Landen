@@ -8,6 +8,7 @@ const L = require('./public/countries.js');
 const fs = require('fs');
 const database = require('./db.js');
 const challenges = require('./challenges.js');
+const quiz = require('./quiz.js');
 
 const { APP_FILES, PACKAGE_FILES } = require('./required-files.js');
 
@@ -382,8 +383,8 @@ app.get(
   h(async (req, res) => {
     const users = await db.all('SELECT id, name, color FROM users ORDER BY id');
     const byUser = await countriesByUser();
-    const bonus = await challenges.challengeBonus(db);
-    // bonusXp (challenges) is shown apart and never counts for the ranking.
+    const bonus = await quiz.bonusByUser(db);
+    // bonusXp (challenges + quiz) is shown apart and never counts for the ranking.
     const board = users.map((u) => ({ id: u.id, name: u.name, color: u.color, ...statsOf(byUser.get(u.id) || []), bonusXp: bonus.get(Number(u.id)) || 0 }));
     board.sort((a, b) => b.xp - a.xp || b.visited - a.visited);
     res.json({ board });
@@ -464,6 +465,7 @@ app.delete(
 // Dashboard, ideas, plans and the family AI.
 const family = require('./family.js').register(app, { getDb: () => db, h, requireUser, requireAdmin, bad, now });
 require('./ai.js').register(app, { h, requireUser, bad, family });
+quiz.register(app, { getDb: () => db, h, requireUser, bad, now });
 
 // Render's health check: the web server answers and the database is reachable.
 app.get(

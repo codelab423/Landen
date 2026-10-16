@@ -171,7 +171,7 @@ function register(app, { getDb, h, requireUser, requireAdmin, bad, now }) {
     h(async (req, res) => {
       const db = getDb();
       await challenges.settle(db).catch((e) => console.warn('Challenge:', e.message));
-      const [snap, settings, challenge, bonus] = await Promise.all([familySnapshot(db), getSettings(db), challenges.status(db), challenges.challengeBonus(db)]);
+      const [snap, settings, challenge, bonus] = await Promise.all([familySnapshot(db), getSettings(db), challenges.status(db), require('./quiz.js').bonusByUser(db)]);
       res.json({ ...buildDashboard(snap), challenge, bonus: Object.fromEntries(bonus), hiddenWidgets: settings.hiddenWidgets });
     })
   );
