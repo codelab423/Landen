@@ -1262,13 +1262,17 @@
     },
     recent(d) {
       if (!d.recent.length) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
-      // Ticks by the same person within an hour of each other become one (expandable) line.
-      const toTime = (at) => new Date(String(at).replace(' ', 'T') + 'Z').getTime();
+      // Everything one person ticked on the same (local) day becomes one expandable line.
+      const dayOf = (at) => new Date(String(at).replace(' ', 'T') + 'Z').toDateString();
       const groups = [];
+      const byKey = new Map();
       d.recent.forEach((r) => {
-        const last = groups[groups.length - 1];
-        if (last && last.user === r.user && toTime(last.items[last.items.length - 1].at) - toTime(r.at) < 3600000) last.items.push(r);
-        else groups.push({ user: r.user, items: [r] });
+        const key = r.user + '|' + dayOf(r.at);
+        if (!byKey.has(key)) {
+          byKey.set(key, { user: r.user, items: [] });
+          groups.push(byKey.get(key));
+        }
+        byKey.get(key).items.push(r);
       });
       return `<ul class="feed">${groups
         .slice(0, 8)
@@ -1281,7 +1285,7 @@
             return `<li>${face}<span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${xp} XP · ${timeAgo(r.at)}</small></span></li>`;
           }
           return `<li>${face}<details class="feed-group"><summary><b>${esc(u.name)}</b> ${t('addedN', { n: g.items.length })}
-            <small>+${num(xp)} XP · ${timeAgo(g.items[0].at)}</small></summary>
+            <small>· ${timeAgo(g.items[0].at)} (+${num(xp)} XP)</small></summary>
             <div class="chips">${g.items.map((r) => chip(r.code)).join('')}</div></details></li>`;
         })
         .join('')}</ul>`;
