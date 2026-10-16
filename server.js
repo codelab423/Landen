@@ -346,6 +346,23 @@ app.put(
   })
 );
 
+// Only the travel year of one of your own visited countries (Timeline quick fill).
+app.patch(
+  '/api/me/countries/:code/year',
+  requireUser,
+  h(async (req, res) => {
+    const code = String(req.params.code).toUpperCase();
+    const { year } = req.body || {};
+    const y = year === null || year === '' || year === undefined ? null : Number(year);
+    if (y !== null && !(Number.isInteger(y) && y >= 1900 && y <= new Date().getFullYear())) return bad(res, 400, 'invalid_year');
+    const row = await db.get("SELECT 1 AS x FROM countries WHERE user_id = ? AND code = ? AND status = 'visited'", [req.user.id, code]);
+    if (!row) return bad(res, 404, 'not_found');
+    // updated_at stays: older countries without visited_at would otherwise jump to the top of 'latest trips'.
+    await db.run('UPDATE countries SET year = ? WHERE user_id = ? AND code = ?', [y, req.user.id, code]);
+    res.json({ countries: await countriesOf(req.user.id) });
+  })
+);
+
 app.delete(
   '/api/me/countries/:code',
   requireUser,
