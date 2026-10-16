@@ -1806,6 +1806,15 @@
   // Year of a trip: the travel year if someone filled it in, otherwise the year it was ticked.
   const tripYear = (i) => i.year || (i.visitedAt ? Number(i.visitedAt.slice(0, 4)) : null);
 
+  const recentYears = (n) => Array.from({ length: n }, (_, i) => new Date().getFullYear() - i);
+  function yearSelect(code, cls) {
+    const c = L.BY_CODE[code];
+    return `<select class="${cls}" data-code="${code}" aria-label="${esc(t('yearFor', { country: cname(c) }))}">
+      <option value="">${t('pickYear')}</option>${recentYears(new Date().getFullYear() - 1939)
+        .map((y) => `<option>${y}</option>`)
+        .join('')}</select>`;
+  }
+
   async function renderTimeline(main) {
     main.innerHTML = `
       <div class="page-head">
@@ -1826,8 +1835,66 @@
     if (currentView() !== 'timeline') return;
     const sel = document.getElementById('tl-who');
     const body = document.getElementById('tl-body');
+    const myUndated = () => data.items.filter((i) => i.user === state.me.id && !tripYear(i));
+    // Save a year for one of my countries; the country moves into that year right away.
+    const saveYear = async (code, year) => {
+      const res = await api('PATCH', `/api/me/countries/${code}/year`, { year });
+      setMine(res.countries);
+      data.items.filter((i) => i.user === state.me.id && i.code === code).forEach((i) => (i.year = year));
+    };
+    const quickFill = () => {
+      const queue = myUndated().map((i) => i.code);
+      let at = 0;
+      let filled = 0;
+      const m = openModal('<div id="qf"></div>');
+      const box = m.querySelector('#qf');
+      const step = () => {
+        if (at >= queue.length) {
+          box.innerHTML = `<div class="modal-head"><span style="font-size:40px">🎉</span><div><h3>${t('qfDone')}</h3>
+            <small>${t('qfDoneSub', { n: filled })}</small></div></div>
+            <div class="modal-foot"><span></span><button class="btn primary" data-close>${t('close')}</button></div>`;
+          box.querySelector('[data-close]').onclick = closeModal;
+          return;
+        }
+        const c = L.BY_CODE[queue[at]];
+        box.innerHTML = `<div class="modal-head">${flag(c.code, 'big')}<div><h3>${t('qfWhen', { country: cname(c) })}</h3>
+            <small>${t('qfOf', { i: at + 1, n: queue.length })}</small></div></div>
+          <div class="qf-years">${recentYears(8).map((y) => `<button class="btn" data-y="${y}">${y}</button>`).join('')}</div>
+          <label class="field"><span>${t('qfOlder')}</span>${yearSelect(c.code, 'qf-older')}</label>
+          <div class="error" id="qf-error"></div>
+          <div class="modal-foot"><button class="btn" data-close>${t('qfStop')}</button><button class="btn" id="qf-skip">${t('qfSkip')} →</button></div>`;
+        const pick = async (y) => {
+          try {
+            await saveYear(c.code, y);
+            filled++;
+            at++;
+            step();
+          } catch (e) {
+            box.querySelector('#qf-error').textContent = errText(e);
+          }
+        };
+        box.querySelectorAll('[data-y]').forEach((b) => (b.onclick = () => pick(Number(b.dataset.y))));
+        box.querySelector('.qf-older').onchange = (e) => e.target.value && pick(Number(e.target.value));
+        box.querySelector('#qf-skip').onclick = () => {
+          at++;
+          step();
+        };
+        box.querySelector('[data-close]').onclick = closeModal;
+        box.querySelector('[data-y]').focus();
+      };
+      step();
+      // Redraw the timeline when the dialog closes, whichever way.
+      const obs = new MutationObserver(() => {
+        if (!document.body.contains(m)) {
+          obs.disconnect();
+          if (currentView() === 'timeline') draw();
+        }
+      });
+      obs.observe($modalRoot, { childList: true, subtree: true });
+    };
     const draw = () => {
       const who = Number(sel.value) || null;
+      const todo = myUndated().length;
       const items = data.items.filter((i) => !who || i.user === who);
       const byYear = new Map();
       items.forEach((i) => {
@@ -1840,7 +1907,11 @@
         body.innerHTML = `<div class="card empty">${t('timelineEmpty')}</div>`;
         return;
       }
-      body.innerHTML = `<ol class="timeline">${years
+      const todoBox = todo
+        ? `<div class="card tl-todo"><span>📅 ${t(todo === 1 ? 'yearsLeft1' : 'yearsLeftN', { n: todo })}</span>
+            <button class="btn primary small" id="tl-quick">⚡ ${t('qfButton')}</button></div>`
+        : '';
+      body.innerHTML = `${todoBox}<ol class="timeline">${years
         .map((y) => {
           const list = byYear.get(y);
           const perUser = new Map();
@@ -1854,15 +1925,23 @@
             ${[...perUser.entries()]
               .map(([uid, trips]) => {
                 const u = userById(data.users, uid);
+                // My own countries without a year get a year picker that saves right away.
+                const editable = y === 'none' && uid === state.me.id;
                 return `<div class="tl-person">
                   <span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>
                   <b>${esc(u.name)}</b><small>${trips.length}</small>
-                  <div class="chips">${trips
+                  ${
+                    editable
+                      ? `<div class="tl-fill">${trips
+                          .map((i) => `<span class="tl-fill-item">${chip(i.code)}${yearSelect(i.code, 'tl-year-pick')}</span>`)
+                          .join('')}</div>`
+                      : `<div class="chips">${trips
                     .map((i) => {
                       const ticked = i.visitedAt ? t('tickedOn', { date: new Date(i.visitedAt.replace(' ', 'T') + 'Z').toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB') }) : '';
                       return `<button class="chip" data-open="${i.code}" title="${esc(ticked)}">${flag(i.code, 'sm')}${cname(L.BY_CODE[i.code])}</button>`;
                     })
-                    .join('')}</div>
+                    .join('')}</div>`
+                  }
                 </div>`;
               })
               .join('')}
@@ -1871,6 +1950,23 @@
         .join('')}</ol>
         <p class="hint">📅 ${t('timelineHint')}</p>`;
       body.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+      body.querySelectorAll('.tl-year-pick').forEach(
+        (s) =>
+          (s.onchange = async () => {
+            if (!s.value) return;
+            s.disabled = true;
+            try {
+              await saveYear(s.dataset.code, Number(s.value));
+              toast(t('saved'));
+              draw();
+            } catch (e) {
+              s.disabled = false;
+              toast(errText(e), 'error');
+            }
+          })
+      );
+      const q = body.querySelector('#tl-quick');
+      if (q) q.onclick = quickFill;
     };
     sel.onchange = draw;
     draw();

@@ -2311,3 +2311,13 @@ h3 {
 .dot-r { background: #60a5fa; opacity: .75; }
 .best-month { display: block; margin-top: 2px; color: var(--muted); }
 .best-month b { color: inherit; text-transform: capitalize; }
+
+/* ---------- Timeline: fill in years ---------- */
+.tl-todo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.tl-fill { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.tl-fill-item { display: inline-flex; align-items: center; gap: 2px; border: 1px dashed rgba(148,163,184,.35); border-radius: 999px; padding: 2px 4px 2px 2px; max-width: 100%; }
+.tl-fill-item .chip { border: 0; flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+.tl-fill-item .tl-year-pick { flex: none; width: auto; }
+.tl-year-pick, .qf-older { background: var(--card, #111827); color: inherit; border: 1px solid rgba(148,163,184,.35); border-radius: 8px; padding: 4px 6px; font: inherit; font-size: .85rem; }
+.qf-years { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 0 6px; }
+.qf-older { width: 100%; padding: 10px; }
