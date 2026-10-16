@@ -58,6 +58,14 @@ const SCHEMA_SQLITE = `
     body TEXT NOT NULL,
     countries TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
+  );  CREATE TABLE IF NOT EXISTS challenge_wins (
+    month TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    challenge TEXT NOT NULL,
+    bonus INTEGER NOT NULL,
+    code TEXT,
+    amount INTEGER,
+    won_at TEXT NOT NULL
   );
 `;
 
@@ -109,6 +117,14 @@ const SCHEMA_PG = `
     body TEXT NOT NULL,
     countries TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
+  );  CREATE TABLE IF NOT EXISTS challenge_wins (
+    month TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    challenge TEXT NOT NULL,
+    bonus INTEGER NOT NULL,
+    code TEXT,
+    amount INTEGER,
+    won_at TEXT NOT NULL
   );
 `;
 
