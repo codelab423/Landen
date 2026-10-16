@@ -204,6 +204,14 @@
     document.documentElement.lang = state.lang;
     try {
       state.config = await api('GET', '/api/config');
+      // This page came from an older deploy (kept by the service worker while the server was
+      // asleep): load the new version once.
+      const mine = document.querySelector('meta[name=build]');
+      if (mine && state.config.build && mine.content !== state.config.build && sessionStorage.getItem('landen-reload') !== state.config.build) {
+        sessionStorage.setItem('landen-reload', state.config.build);
+        location.reload();
+        return;
+      }
     } catch (e) {
       state.config = { needsFamilyCode: false, firstUser: false };
     }
@@ -1102,6 +1110,14 @@
     return d.toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  // 'vandaag' / 'gisteren' / '3 dagen geleden' / '12 aug 2026' for a calendar day ('2026-08-12').
+  function dayLabel(day, daysAgo) {
+    if (daysAgo <= 0) return t('today');
+    if (daysAgo === 1) return t('yesterday');
+    if (daysAgo < 30) return t('daysAgo', { n: daysAgo });
+    return new Date(day + 'T12:00:00Z').toLocaleDateString(state.lang === 'nl' ? 'nl-NL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
   // Tiny, safe Markdown: escape everything first, then add headings, bold, lists and line breaks.
   function md(text) {
     const lines = esc(text).split('\n');
@@ -1311,31 +1327,18 @@
     },
     recent(d) {
       if (!d.recent.length) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
-      // Everything one person ticked on the same (local) day becomes one expandable line.
-      const dayOf = (at) => new Date(String(at).replace(' ', 'T') + 'Z').toDateString();
-      const groups = [];
-      const byKey = new Map();
-      d.recent.forEach((r) => {
-        const key = r.user + '|' + dayOf(r.at);
-        if (!byKey.has(key)) {
-          byKey.set(key, { user: r.user, items: [] });
-          groups.push(byKey.get(key));
-        }
-        byKey.get(key).items.push(r);
-      });
-      return `<ul class="feed">${groups
-        .slice(0, 8)
+      // The server groups everything one person ticked on the same Dutch calendar day.
+      return `<ul class="feed">${d.recent
         .map((g) => {
           const u = userById(d.users, g.user);
           const face = `<span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span>`;
-          const xp = L.xpFor(g.items.map((r) => r.code));
-          if (g.items.length === 1) {
-            const r = g.items[0];
-            return `<li>${face}<span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(r.code)} <small>+${xp} XP · ${timeAgo(r.at)}</small></span></li>`;
+          const when = dayLabel(g.day, g.daysAgo);
+          if (g.codes.length === 1) {
+            return `<li>${face}<span><b>${esc(u.name)}</b> ${t('wasIn')} ${chip(g.codes[0])} <small>+${num(g.xp)} XP · ${when}</small></span></li>`;
           }
-          return `<li>${face}<details class="feed-group"><summary><b>${esc(u.name)}</b> ${t('addedN', { n: g.items.length })}
-            <small>· ${timeAgo(g.items[0].at)} (+${num(xp)} XP)</small></summary>
-            <div class="chips">${g.items.map((r) => chip(r.code)).join('')}</div></details></li>`;
+          return `<li>${face}<details class="feed-group"><summary><b>${esc(u.name)}</b> ${t('addedN', { n: g.codes.length })}
+            <small>· ${when} (+${num(g.xp)} XP)</small></summary>
+            <div class="chips">${g.codes.map((c) => chip(c)).join('')}</div></details></li>`;
         })
         .join('')}</ul>`;
     },

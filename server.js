@@ -5,7 +5,38 @@ const crypto = require('crypto');
 const express = require('express');
 const compression = require('compression');
 const L = require('./public/countries.js');
+const fs = require('fs');
 const database = require('./db.js');
+
+// Files the app cannot run without. If one is missing (e.g. not committed because of
+// .gitignore), stop right away with a clear message instead of a half-working site.
+const REQUIRED_FILES = [
+  'public/index.html',
+  'public/app.js',
+  'public/i18n.js',
+  'public/countries.js',
+  'public/climate.js',
+  'public/style.css',
+  'public/sw.js',
+  'public/data/world.json',
+  'node_modules/d3/dist/d3.min.js',
+  'node_modules/topojson-client/dist/topojson-client.min.js',
+  'node_modules/flag-icons/flags/4x3/nl.svg',
+];
+const missing = REQUIRED_FILES.filter((f) => !fs.existsSync(path.join(__dirname, f)));
+if (missing.length) {
+  console.error('FOUT: Landen kan niet starten, deze bestanden ontbreken:\n' + missing.map((f) => '  - ' + f).join('\n'));
+  console.error('Staan ze in git? Kijk of .gitignore ze uitsluit (git check-ignore -v <bestand>), of draai npm ci.');
+  process.exit(1);
+}
+
+const hashFiles = (files) => {
+  const hash = crypto.createHash('sha1');
+  files.forEach((f) => hash.update(fs.readFileSync(f)));
+  return hash.digest('hex').slice(0, 10);
+};
+// One id for the whole front end; changes whenever any app file changes.
+const BUILD = hashFiles(REQUIRED_FILES.filter((f) => f.startsWith('public/')).map((f) => path.join(__dirname, f)));
 
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -195,7 +226,7 @@ app.use('/api/admin', requireAdmin);
 app.get(
   '/api/config',
   h(async (req, res) => {
-    res.json({ needsFamilyCode: !!FAMILY_CODE, firstUser: (await userCount()) === 0, mapVersion: MAP_VERSION });
+    res.json({ needsFamilyCode: !!FAMILY_CODE, firstUser: (await userCount()) === 0, mapVersion: MAP_VERSION, build: BUILD });
   })
 );
 
@@ -438,7 +469,7 @@ const vendor = {
 // The simplified world map (scripts/build-map.js). Its URL carries a content hash,
 // so browsers may keep it for a year and only fetch it again when the map changes.
 const MAP_FILE = path.join(__dirname, 'public', 'data', 'world.json');
-const MAP_VERSION = crypto.createHash('sha1').update(require('fs').readFileSync(MAP_FILE)).digest('hex').slice(0, 10);
+const MAP_VERSION = hashFiles([MAP_FILE]);
 app.get('/data/world.json', (req, res) => {
   res.set('Cache-Control', req.query.v === MAP_VERSION ? 'public, max-age=31536000, immutable' : 'no-cache');
   res.sendFile(MAP_FILE);
@@ -448,8 +479,17 @@ Object.entries(vendor).forEach(([url, file]) => {
   app.get(url, (req, res) => res.sendFile(file, { maxAge: '30d' }));
 });
 app.use('/flags', express.static(mod('flag-icons', 'flags', '4x3'), { maxAge: '30d' }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// index.html carries the build id: script and style URLs get ?v=<build>, so a page the
+// service worker kept from an older deploy never mixes old and new files, and the app
+// reloads itself when /api/config reports a newer build.
+const INDEX_HTML = fs
+  .readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8')
+  .replace('__BUILD__', BUILD)
+  .replace(/(href|src)="\/([\w.-]+\.(?:css|js))"/g, `$1="/$2?v=${BUILD}"`);
+const sendIndex = (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(INDEX_HTML);
+app.get(['/', '/index.html'], sendIndex);
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+app.get('*', sendIndex);
 
 app.use((err, req, res, next) => {
   console.error(err);

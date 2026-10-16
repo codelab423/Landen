@@ -57,6 +57,30 @@ function countBy(map) {
   return counts; // code -> [userIds]
 }
 
+// Calendar day in the Netherlands ('2026-10-16'), whatever timezone the server runs in.
+const AMS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' });
+const dbDate = (at) => new Date(String(at).replace(' ', 'T') + 'Z');
+const amsDay = (at) => AMS_DAY.format(at instanceof Date ? at : dbDate(at));
+const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 86400000);
+
+// Latest trips: everything one person ticked on the same Dutch calendar day is one group.
+function recentGroups(trips, max) {
+  const today = amsDay(new Date());
+  const groups = [];
+  const byKey = new Map();
+  trips.forEach((t) => {
+    const day = amsDay(t.at);
+    const key = t.user + '|' + day;
+    if (!byKey.has(key)) {
+      const g = { user: t.user, day, daysAgo: dayDiff(today, day), at: t.at, codes: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    byKey.get(key).codes.push(t.code);
+  });
+  return groups.slice(0, max).map((g) => ({ ...g, xp: L.xpFor(g.codes) }));
+}
+
 const byEase = (a, b) => L.BY_CODE[a].tier - L.BY_CODE[b].tier || L.BY_CODE[a].en.localeCompare(L.BY_CODE[b].en);
 
 function buildDashboard(snap) {
@@ -114,8 +138,8 @@ function buildDashboard(snap) {
       const all = L.COUNTRIES.filter((c) => c.continent === k);
       return { key: k, done: all.filter((c) => beenBy[c.code]).length, total: all.length };
     }),
-    // Enough recent ticks for the dashboard to group bulk additions ("Fee added 8 countries").
-    recent: trips.slice(0, 60).map((t) => ({ user: t.user, code: t.code, at: t.at })),
+    // Grouped per person per day: "Fee added 21 countries · today (+1,250 XP)".
+    recent: recentGroups(trips, 8),
   };
 }
 
