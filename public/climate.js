@@ -224,6 +224,66 @@
     return lang === 'en' ? CITY_EN[d[0]] || d[0] : d[0];
   }
 
+  // Big countries have very different climates: two extra regions each (NL name, EN name, T, P).
+  // The first entry of a country is always the city in DATA above.
+  // prettier-ignore
+  var REGIONS = {
+    BR: [
+      ['Amazone (Manaus)', 'Amazon (Manaus)', [26.1, 26, 26.1, 26.2, 26.4, 26.4, 26.6, 27.4, 27.8, 27.7, 27.3, 26.7], [260, 290, 315, 300, 255, 115, 90, 60, 85, 125, 185, 220]],
+      ['Brasília', 'Brasília', [21.6, 21.8, 22, 21.4, 20.2, 19.1, 19.1, 21.2, 22.6, 22.4, 21.6, 21.5], [210, 180, 215, 125, 40, 9, 12, 13, 50, 165, 230, 250]],
+    ],
+    US: [
+      ['Miami (Florida)', 'Miami (Florida)', [20.1, 21, 22.4, 24.4, 26.7, 28.2, 28.9, 29, 28.2, 26.5, 23.6, 21.4], [50, 55, 75, 80, 140, 250, 170, 215, 235, 165, 90, 55]],
+      ['Los Angeles (Californië)', 'Los Angeles (California)', [14.2, 14.6, 15.6, 16.9, 18.3, 20, 22.2, 22.7, 22.1, 19.9, 16.7, 14], [80, 90, 55, 20, 7, 2, 0, 1, 6, 15, 25, 60]],
+    ],
+    RU: [
+      ['Sint-Petersburg', 'Saint Petersburg', [-5.5, -5.8, -1.3, 5.1, 11.3, 15.7, 18.8, 16.9, 11.6, 5.8, 0.2, -3.4], [45, 35, 35, 35, 45, 70, 85, 85, 60, 65, 55, 50]],
+      ['Siberië (Irkoetsk, Baikal)', 'Siberia (Irkutsk, Baikal)', [-17.8, -15.1, -6.6, 2.8, 9.8, 15.9, 18.4, 15.8, 8.7, 1, -8.4, -15.7], [13, 8, 10, 16, 34, 80, 110, 95, 50, 20, 17, 16]],
+    ],
+    CN: [
+      ['Shanghai', 'Shanghai', [4.8, 6.6, 10.4, 15.6, 21, 24.8, 28.8, 28.5, 24.7, 19.7, 13.9, 7.4], [75, 60, 95, 80, 85, 185, 145, 215, 95, 55, 55, 45]],
+      ['Yunnan (Kunming)', 'Yunnan (Kunming)', [8.9, 11, 14.3, 17.4, 19.8, 20.4, 20.4, 19.9, 18.6, 16, 12.4, 9.4], [15, 15, 20, 25, 95, 180, 205, 200, 120, 85, 40, 15]],
+    ],
+    AU: [
+      ['Cairns (tropisch noorden)', 'Cairns (tropical north)', [28.2, 28, 27.2, 25.8, 24, 22.3, 21.6, 22.4, 24.1, 25.8, 27.2, 28], [390, 450, 420, 195, 90, 45, 30, 25, 35, 45, 95, 175]],
+      ['Perth (westkust)', 'Perth (west coast)', [24.5, 24.9, 23.1, 19.9, 16.5, 14.1, 13.1, 13.5, 14.9, 17.3, 20.3, 22.7], [15, 10, 20, 35, 90, 130, 145, 120, 80, 35, 25, 10]],
+    ],
+    CA: [
+      ['Vancouver (westkust)', 'Vancouver (west coast)', [4.1, 5, 6.8, 9.4, 12.8, 15.6, 18.1, 18.3, 15.3, 10.6, 6.5, 3.8], [170, 110, 115, 85, 65, 55, 35, 40, 50, 120, 190, 160]],
+      ['Rocky Mountains (Banff)', 'Rocky Mountains (Banff)', [-8, -5, -1, 4, 9, 12.5, 15, 14.5, 10, 4.5, -3, -7], [25, 25, 30, 40, 60, 70, 60, 55, 45, 35, 30, 25]],
+    ],
+    IN: [
+      ['Goa (zuidwestkust)', 'Goa (south-west coast)', [26.5, 27, 28.5, 29.8, 30.2, 28, 27, 27, 27.2, 28, 28, 27.2], [1, 0, 1, 10, 110, 830, 890, 500, 250, 120, 30, 5]],
+      ['Ladakh (Himalaya)', 'Ladakh (Himalayas)', [-7, -5, 0.5, 6, 10.5, 14.5, 18, 17.5, 13, 6.5, 0.5, -4.5], [10, 9, 12, 7, 7, 4, 15, 15, 9, 5, 3, 6]],
+    ],
+    AR: [
+      ['Iguazú (noorden)', 'Iguazú (north)', [26.5, 26, 25, 22, 18.5, 16.5, 16, 18, 19.5, 22.5, 24, 25.5], [170, 160, 140, 170, 170, 140, 100, 100, 160, 215, 170, 170]],
+      ['Patagonië (El Calafate)', 'Patagonia (El Calafate)', [13.5, 13, 11, 7.5, 3.5, 1, 0.5, 2, 5, 8.5, 11, 12.5], [15, 10, 15, 20, 25, 20, 20, 15, 10, 10, 10, 15]],
+    ],
+    MX: [
+      ['Mexico-Stad', 'Mexico City', [14.2, 15.6, 17.8, 19, 19.6, 18.6, 17.6, 17.8, 17.4, 16.5, 15.3, 14.5], [8, 5, 10, 25, 55, 130, 160, 155, 130, 55, 10, 5]],
+      ['Baja California (Los Cabos)', 'Baja California (Los Cabos)', [19, 19.5, 20.5, 22, 24, 26.5, 29, 29.5, 29, 27, 23.5, 20.5], [15, 5, 2, 0, 0, 0, 10, 55, 105, 30, 15, 15]],
+    ],
+  };
+
+  // All climate series of a country: [{ nl, en, T, P }], the main city first.
+  function series(code) {
+    var d = DATA[code];
+    if (!d) return [];
+    var out = [{ nl: city(code, 'nl'), en: city(code, 'en'), T: d[1], P: d[2] }];
+    (REGIONS[code] || []).forEach(function (r) {
+      out.push({ nl: r[0], en: r[1], T: r[2], P: r[3] });
+    });
+    return out;
+  }
+
+  // Accepts a country code (main city) or one entry from series().
+  function toSeries(key) {
+    if (key && key.T) return key;
+    var d = DATA[key];
+    return d ? { T: d[1], P: d[2] } : null;
+  }
+
   // How pleasant is a month for a holiday? 0 = perfect, lower = worse.
   // Comfortable: a monthly mean of 18-27 °C (days are warmer than the mean) and little rain;
   // cold, heat and lots of rain all cost points.
@@ -260,10 +320,10 @@
   }
 
   function bestMonths(code) {
-    var d = DATA[code];
+    var d = toSeries(code);
     if (!d) return null;
-    var scores = d[1].map(function (t, i) {
-      return monthScore(t, d[2][i]);
+    var scores = d.T.map(function (t, i) {
+      return monthScore(t, d.P[i]);
     });
     var top = Math.max.apply(null, scores);
     var best = [];
@@ -299,7 +359,7 @@
     return ranges;
   }
 
-  var api = { DATA: DATA, city: city, bestMonths: bestMonths, bestRanges: bestRanges, monthRanges: monthRanges, monthScore: monthScore };
+  var api = { DATA: DATA, REGIONS: REGIONS, series: series, city: city, bestMonths: bestMonths, bestRanges: bestRanges, monthRanges: monthRanges, monthScore: monthScore };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CLIMATE = api;
 })(this);

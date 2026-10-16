@@ -1,5 +1,9 @@
 window.I18N = {
   nl: {
+    climateTitle: "Klimaat & beste reistijd",
+    basedOn: "Gebaseerd op: {city}",
+    climateRegions: "Regio's",
+    climateOtherRegions: "groot land: kies hierboven een andere regio",
     yearsLeftN: "Nog {n} landen zonder jaar",
     yearsLeft1: "Nog 1 land zonder jaar",
     qfButton: "Snel invullen",
@@ -13,7 +17,6 @@ window.I18N = {
     pickYear: "Jaar…",
     yearFor: "Jaar voor {country}",
     allYear: 'het hele jaar',
-    climateIn: 'Klimaat in {city}',
     bestTime: 'Beste tijd',
     bestMonth: 'Beste maand om te gaan',
     tempLegend: 'temperatuur',
@@ -286,6 +289,10 @@ window.I18N = {
     err_generic: 'Er ging iets mis. Probeer het opnieuw.',
   },
   en: {
+    climateTitle: "Climate & best time to go",
+    basedOn: "Based on: {city}",
+    climateRegions: "Regions",
+    climateOtherRegions: "big country: pick another region above",
     yearsLeftN: "{n} countries without a year",
     yearsLeft1: "1 country without a year",
     qfButton: "Quick fill",
@@ -299,7 +306,6 @@ window.I18N = {
     pickYear: "Year…",
     yearFor: "Year for {country}",
     allYear: 'all year',
-    climateIn: 'Climate in {city}',
     bestTime: 'Best time',
     bestMonth: 'Best month to go',
     tempLegend: 'temperature',

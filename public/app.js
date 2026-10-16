@@ -66,14 +66,26 @@
   }
 
   // Twelve small bars: temperature (height + colour) and rain, best months highlighted.
-  function climateChart(code) {
-    const d = CLIMATE.DATA[code];
-    if (!d) return '';
-    const best = new Set(CLIMATE.bestMonths(code).months);
+  // Big countries (Brazil, USA, …) get tabs for 2 extra regions with their own best time.
+  function climateChart(code, regionIdx) {
+    const all = CLIMATE.series(code);
+    if (!all.length) return '';
+    const idx = Math.min(regionIdx || 0, all.length - 1);
+    const s = all[idx];
+    const best = new Set(CLIMATE.bestMonths(s).months);
     const tempColor = (v) => (v < 5 ? '#60a5fa' : v < 15 ? '#34d399' : v < 25 ? '#fbbf24' : '#f97316');
-    const cols = d[1]
+    const tabs =
+      all.length > 1
+        ? `<div class="cl-tabs" role="tablist" aria-label="${t('climateRegions')}">${all
+            .map(
+              (r, i) =>
+                `<button type="button" role="tab" aria-selected="${i === idx}" class="cl-tab ${i === idx ? 'on' : ''}" data-region="${i}" data-code="${code}">${esc(r[state.lang])}<small>${bestTimeLabel(r)}</small></button>`
+            )
+            .join('')}</div>`
+        : '';
+    const cols = s.T
       .map((temp, m) => {
-        const rain = d[2][m];
+        const rain = s.P[m];
         const th = Math.max(4, Math.min(100, ((temp + 10) / 45) * 100));
         const rh = Math.max(2, Math.min(100, (rain / 300) * 100));
         const label = `${monthName(m, 'long')}: ${String(temp).replace('.', state.lang === 'nl' ? ',' : '.')} °C · ${rain} mm`;
@@ -83,11 +95,20 @@
       })
       .join('');
     return `<section class="climate">
-      <header><b>🌦️ ${t('climateIn', { city: esc(CLIMATE.city(code, state.lang)) })}</b><span class="pill best-pill">☀️ ${t('bestTime')}: ${bestTimeLabel(code)}</span></header>
+      <header><b>🌦️ ${t('climateTitle')}</b><span class="pill best-pill">☀️ ${t('bestTime')}: ${bestTimeLabel(s)}</span></header>
+      ${tabs}
       <div class="cl-chart">${cols}</div>
-      <small class="cl-legend"><i class="dot-t"></i> ${t('tempLegend')} <i class="dot-r"></i> ${t('rainLegend')} · ${t('climateNote')}</small>
+      <small class="cl-legend"><i class="dot-t"></i> ${t('tempLegend')} <i class="dot-r"></i> ${t('rainLegend')}</small>
+      <small class="cl-source">📍 ${t('basedOn', { city: esc(s[state.lang]) })} · ${t('climateNote')}${all.length > 1 && idx === 0 ? ' · ' + t('climateOtherRegions') : ''}</small>
     </section>`;
   }
+  // Region tabs inside any country window.
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest('.cl-tab');
+    if (!tab) return;
+    const box = tab.closest('.climate');
+    box.outerHTML = climateChart(tab.dataset.code, Number(tab.dataset.region));
+  });
 
   // Wishlist line: "☀️ Beste maand: juli · nu!" (when this month is one of the best months).
   function bestMonthLine(code) {
@@ -727,7 +748,7 @@
       }
     }
     $tooltip.innerHTML = `<b>${cname(c)}</b>${tierBadge(c.tier)} <strong>${c.xp} XP</strong><div style="margin-top:4px;color:var(--muted)">${status}</div>
-      <div style="margin-top:2px;color:var(--muted)">☀️ ${t('bestTime')}: ${bestTimeLabel(c.code)}</div>`;
+      <div style="margin-top:2px;color:var(--muted)">☀️ ${t('bestTime')}: ${bestTimeLabel(c.code)} <small>(${esc(CLIMATE.city(c.code, state.lang))})</small></div>`;
     $tooltip.hidden = false;
     const pad = 14;
     let x = ev.clientX + pad;
