@@ -263,6 +263,9 @@
 
   async function onLoggedIn(data) {
     loadSettings();
+    api('GET', '/api/distances')
+      .then((d) => (state.distances = d))
+      .catch(() => {});
     await loadPeople();
     state.me = data.user;
     if (data.user.lang && !storedLang()) state.lang = data.user.lang;
@@ -773,6 +776,10 @@
 
   // ---------- country modal ----------
 
+  // "· ✈️ 670 km vanaf Nederland" (great-circle distance to the middle of the country).
+  const distanceText = (code) =>
+    code !== L.HOME && state.distances && state.distances[code] ? ` · ✈️ ${t('kmFromHome', { km: num(state.distances[code]) })}` : '';
+
   function openCountry(code) {
     const c = L.BY_CODE[code];
     const v = viewed();
@@ -782,7 +789,7 @@
 
     if (v.readOnly) {
       openModal(`
-        <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
+        <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}${distanceText(code)}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
         ${climateChart(code)}
         <p><b>${esc(v.user.name)}:</b> ${row ? (row.status === 'visited' ? '✅ ' + t('visited') : '⭐ ' + t('wish')) : t('notVisited')}
         ${row && row.year ? ' · ' + row.year : ''}</p>
@@ -792,7 +799,7 @@
     }
 
     const m = openModal(`
-      <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
+      <div class="modal-head">${flag(code, 'big')}<div><h3>${cname(c)}</h3><small>${L.CONTINENTS[c.continent][state.lang]}${distanceText(code)}</small><div>${tierBadge(c.tier)} <b>${c.xp} XP</b></div></div></div>
         ${climateChart(code)}
       ${
         home
@@ -1198,6 +1205,7 @@
   const WIDGET_ICONS = {
     stats: '📈',
     challenge: '🏁',
+    records: '✈️',
     next: '🎯',
     never: '🧭',
     wanted: '😍',
@@ -1241,7 +1249,7 @@
     }
     if (currentView() !== 'dash') return;
     const hidden = new Set(d.hiddenWidgets || []);
-    const order = ['stats', 'challenge', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
+    const order = ['stats', 'challenge', 'records', 'next', 'wanted', 'never', 'ask', 'popular', 'everyone', 'rarest', 'unique', 'continents', 'recent'];
     const el = document.getElementById('widgets');
     el.innerHTML = order
       .filter((k) => !hidden.has(k))
@@ -1266,7 +1274,19 @@
     return t((n === 1 ? 'unit1_' : 'unitN_') + unit);
   }
 
+  const earthLine = (km, times) =>
+    `${num(km)} km · ${t('earthTimes', { n: String(times).replace('.', state.lang === 'nl' ? ',' : '.') })} 🌍`;
+
   const WIDGETS = {
+    // Family distance record: the farthest trip, and all trips together around the earth.
+    records(d) {
+      const r = d.records;
+      if (!r || !r.farthest) return `<p class="w-empty">${t('w_recent_empty')}</p>`;
+      const names = r.farthest.users.map((id) => `<b>${esc(userById(d.users, id).name)}</b>`).join(' &amp; ');
+      return `<p class="rec-top">🏆 ${t('farthestTrip')}: ${chip(r.farthest.code)} <span>${t('byName', { name: names })}</span> <small>(${num(r.farthest.km)} km)</small></p>
+        <p class="rec-earth">${t('familyTogether')}: ${earthLine(r.totalKm, r.earth)}</p>
+        <a class="linkish" href="#/ranking">${t('allRecords')} →</a>`;
+    },
     // This month's family challenge: winner, or standings, plus last month's winner.
     challenge(d) {
       const c = d.challenge;
@@ -2128,6 +2148,38 @@
     };
   }
 
+  // Distance records per member, under the leaderboard.
+  async function recordsBoard(el) {
+    let data;
+    try {
+      data = await api('GET', '/api/records');
+    } catch (e) {
+      return;
+    }
+    if (currentView() !== 'ranking') return;
+    const small = (code) => (code ? chip(code) : '–');
+    el.innerHTML = `<h3 class="section-title">✈️ ${t('recordsTitle')}</h3>
+      <p class="sub">${t('recordsSub')}</p>
+      <div class="rec-grid">${data.members
+        .map((m) => {
+          const u = userById(data.users, m.user);
+          const head = `<header><span class="avatar xs" style="background:${esc(u.color)}" title="${esc(u.name)}" aria-label="${esc(u.name)}">${esc(initials(u.name))}</span><b>${esc(u.name)}</b></header>`;
+          if (!m.count) return `<article class="card rec-card ${m.user === state.me.id ? 'me' : ''}">${head}<p class="w-empty">${t('noTripsYet')}</p></article>`;
+          return `<article class="card rec-card ${m.user === state.me.id ? 'me' : ''}">${head}
+            <p>🏆 ${t('farthest')}: ${small(m.farthest.code)} <small>${num(m.farthest.km)} km</small></p>
+            <p class="rec-earth">✈️ ${earthLine(m.totalKm, m.earth)}</p>
+            <dl class="rec-compass">
+              <div><dt>⬆️ ${t('northmost')}</dt><dd>${small(m.north)}</dd></div>
+              <div><dt>⬇️ ${t('southmost')}</dt><dd>${small(m.south)}</dd></div>
+              <div><dt>➡️ ${t('eastmost')}</dt><dd>${small(m.east)}</dd></div>
+              <div><dt>⬅️ ${t('westmost')}</dt><dd>${small(m.west)}</dd></div>
+            </dl></article>`;
+        })
+        .join('')}</div>
+      <p class="hint">📏 ${t('recordsHint')}</p>`;
+    el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+  }
+
   // Quiz scoreboard under the leaderboard.
   async function quizBoard(el) {
     let scores;
@@ -2156,7 +2208,8 @@
   // ---------- leaderboard ----------
 
   async function renderRanking(main) {
-    main.innerHTML = `<h2>${t('rankingTitle')}</h2><p class="sub">&nbsp;</p><div id="lb"></div><div id="quiz-board"></div>`;
+    main.innerHTML = `<h2>${t('rankingTitle')}</h2><p class="sub">&nbsp;</p><div id="lb"></div><div id="records"></div><div id="quiz-board"></div>`;
+    recordsBoard(main.querySelector('#records'));
     quizBoard(main.querySelector('#quiz-board'));
     let board;
     try {

@@ -4,8 +4,9 @@
 
 const L = require('./public/countries.js');
 const challenges = require('./challenges.js');
+const geo = require('./geo.js');
 
-const WIDGETS = ['stats', 'challenge', 'next', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
+const WIDGETS = ['stats', 'challenge', 'records', 'next', 'never', 'wanted', 'everyone', 'popular', 'unique', 'ask', 'rarest', 'continents', 'recent'];
 
 // Settings live in a key/value table as JSON.
 async function getSettings(db) {
@@ -82,6 +83,43 @@ function recentGroups(trips, max) {
   return groups.slice(0, max).map((g) => ({ ...g, xp: L.xpFor(g.codes) }));
 }
 
+// Distance from home (the Netherlands) to the middle of a country's main land, in km.
+const kmFromHome = (code) => Math.round(geo.distanceBetween(L.HOME, code) || 0);
+
+// Distance records per member: farthest country, total km (there and back for every
+// country), and the most northern / southern / eastern / western country.
+function buildRecords(snap) {
+  const members = snap.users.map((u) => {
+    const items = snap.visited
+      .get(u.id)
+      .filter((c) => c !== L.HOME && geo.centroid(c))
+      .map((code) => ({ code, km: kmFromHome(code), lon: geo.centroid(code)[0], lat: geo.centroid(code)[1] }));
+    if (!items.length) return { user: u.id, count: 0 };
+    const top = (f) => items.reduce((a, b) => (f(b) > f(a) ? b : a)).code;
+    const totalKm = items.reduce((s, i) => s + i.km * 2, 0);
+    const far = items.reduce((a, b) => (b.km > a.km ? b : a));
+    return {
+      user: u.id,
+      count: items.length,
+      farthest: { code: far.code, km: far.km },
+      totalKm,
+      earth: Math.round((totalKm / geo.EARTH_CIRCUMFERENCE_KM) * 10) / 10,
+      north: top((i) => i.lat),
+      south: top((i) => -i.lat),
+      east: top((i) => i.lon),
+      west: top((i) => -i.lon),
+    };
+  });
+  const withTrips = members.filter((m) => m.count);
+  let farthest = null;
+  if (withTrips.length) {
+    const best = withTrips.reduce((a, b) => (b.farthest.km > a.farthest.km ? b : a)).farthest;
+    farthest = { ...best, users: withTrips.filter((m) => m.farthest.code === best.code).map((m) => m.user) };
+  }
+  const totalKm = withTrips.reduce((s, m) => s + m.totalKm, 0);
+  return { members, family: { farthest, totalKm, earth: Math.round((totalKm / geo.EARTH_CIRCUMFERENCE_KM) * 10) / 10 } };
+}
+
 const byEase = (a, b) => L.BY_CODE[a].tier - L.BY_CODE[b].tier || L.BY_CODE[a].en.localeCompare(L.BY_CODE[b].en);
 
 function buildDashboard(snap) {
@@ -139,6 +177,7 @@ function buildDashboard(snap) {
       const all = L.COUNTRIES.filter((c) => c.continent === k);
       return { key: k, done: all.filter((c) => beenBy[c.code]).length, total: all.length };
     }),
+    records: buildRecords(snap).family,
     // Grouped per person per day: "Fee added 21 countries · today (+1,250 XP)".
     recent: recentGroups(trips, 8),
   };
@@ -175,6 +214,23 @@ function register(app, { getDb, h, requireUser, requireAdmin, bad, now }) {
       res.json({ ...buildDashboard(snap), challenge, bonus: Object.fromEntries(bonus), hiddenWidgets: settings.hiddenWidgets });
     })
   );
+
+  // Distance records for the leaderboard page.
+  app.get(
+    '/api/records',
+    requireUser,
+    h(async (req, res) => {
+      const snap = await familySnapshot(getDb());
+      res.json({ users: snap.users, ...buildRecords(snap) });
+    })
+  );
+
+  // Distance from the Netherlands for every country (for the country window); never changes.
+  let distances = null;
+  app.get('/api/distances', requireUser, (req, res) => {
+    distances = distances || Object.fromEntries(L.COUNTRIES.map((c) => [c.code, kmFromHome(c.code)]));
+    res.set('Cache-Control', 'private, max-age=86400').json(distances);
+  });
 
   // Timeline: every visited country (except home) with its trip year and the date it was ticked.
   app.get(
