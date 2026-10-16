@@ -44,6 +44,9 @@ Elk land kleurt op een gedetailleerde wereldkaart, en je verdient XP — hoe moe
 - **Landen-quiz** (Worldle-stijl): elke dag hetzelfde land voor iedereen, raad het aan de vorm in max 6 gokken. Na
   elke fout zie je de afstand, de richting en hoe dichtbij je zat. Goed geraden = 60 tot 10 quiz-XP (bonus-XP,
   apart van reis-XP). Quiz-scorebord (reeks, gemiddeld aantal gokken) op de Ranglijst. Zie [`quiz.js`](quiz.js).
+- **Afstand & records**: per land de afstand vanaf Nederland (hemelsbreed, naar het midden van het land). Per lid het
+  verste land, het totaal aantal km (heen en terug per land, "1,8× rond de aarde 🌍") en het noordelijkste,
+  zuidelijkste, oostelijkste en westelijkste land; op het dashboard de verste reis van de familie.
 - **Ideeën & plannen**: deel reisideeën, stem met 👍, en bewaar reisplannen voor de hele familie.
 - **Familie-AI**: werkt **gratis** via je eigen claude.ai-account (de app kopieert je vraag mét alle familiedata en opent Claude; het antwoord plak je terug als plan of idee). Optioneel, en dan kost het geld: direct in de app, als reismaatje dat alle landen, wensenlijsten en ideeën kent. Het helpt plannen
   maken, en je kunt een antwoord met één klik bewaren als plan of delen als idee.

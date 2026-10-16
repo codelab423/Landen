@@ -2369,3 +2369,18 @@ h3 {
 @media (max-width: 760px) { .quiz { grid-template-columns: minmax(0, 1fr); } .quiz-shape { min-height: 180px; } }
 .q-who { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 520px) { .q-table { font-size: .8rem; } .q-table th, .q-table td { padding: 7px 6px; } .q-table th { font-size: .7rem; } }
+
+/* ---------- Distance & records ---------- */
+.rec-top, .rec-earth { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.rec-top small { color: var(--muted); }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.rec-card { padding: 14px; min-width: 0; }
+.rec-card.me { border-color: var(--brand-2, #2dd4bf); }
+.rec-card header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rec-card p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.rec-card p small { color: var(--muted); }
+.rec-compass { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.rec-compass div { min-width: 0; }
+.rec-compass dt { color: var(--muted); font-size: .75rem; margin-bottom: 2px; }
+.rec-compass dd { margin: 0; }
+.rec-compass .chip { max-width: 100%; }
