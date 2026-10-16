@@ -101,7 +101,7 @@ async function httpChecks() {
   const cookie = (reg.headers.get('set-cookie') || '').split(';')[0];
   const tick = await post('/api/me/countries/BE', { status: 'visited' }, cookie, 'PUT');
   check(tick.status === 200, 'land aanvinken', `status ${tick.status}`);
-  for (const url of ['/api/me', '/api/dashboard', '/api/timeline', '/api/leaderboard', '/api/people', '/api/family', '/api/settings']) {
+  for (const url of ['/api/me', '/api/dashboard', '/api/timeline', '/api/leaderboard', '/api/people', '/api/family', '/api/settings', '/api/quiz', '/api/quiz/scores']) {
     const res = await fetch(BASE + url, { headers: { cookie } });
     check(res.status === 200, `GET ${url}`, `status ${res.status}`);
   }

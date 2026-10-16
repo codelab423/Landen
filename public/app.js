@@ -4,7 +4,7 @@
   const L = window.LANDEN;
   const CLIMATE = window.CLIMATE;
   const PRESET_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#0ea5e9', '#a855f7', '#0f766e', '#334155'];
-  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'timeline', 'ideas', 'ranking', 'admin'];
+  const VIEWS = ['dash', 'map', 'list', 'wish', 'badges', 'timeline', 'quiz', 'ideas', 'ranking', 'admin'];
   const $app = document.getElementById('app');
   const $tooltip = document.getElementById('tooltip');
   const $toasts = document.getElementById('toasts');
@@ -291,7 +291,7 @@
     $app.innerHTML = shell(view) + '<main id="main"></main>';
     bindShell();
     const main = document.getElementById('main');
-    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, timeline: renderTimeline, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
+    ({ dash: renderDashboard, map: renderMap, list: renderList, wish: renderWish, badges: renderBadges, timeline: renderTimeline, quiz: renderQuiz, ideas: renderIdeas, ranking: renderRanking, admin: renderAdmin })[view](main);
   }
 
   function langToggle() {
@@ -373,6 +373,7 @@
       ['wish', '⭐ ' + t('navWish')],
       ['badges', '🏅 ' + t('navBadges')],
       ['timeline', '🕒 ' + t('navTimeline')],
+      ['quiz', '🧩 ' + t('navQuiz')],
       ['ideas', '💡 ' + t('navIdeas')],
       ['ranking', '👨‍👩‍👧‍👦 ' + t('navRanking')],
     ];
@@ -511,14 +512,20 @@
       .join('');
   }
 
+  const scripts = {};
   function loadScript(src) {
-    return new Promise((resolve, reject) => {
+    // Each script only once, also when the quiz and the map both ask for d3.
+    if (scripts[src]) return scripts[src];
+    return (scripts[src] = new Promise((resolve, reject) => {
       const el = document.createElement('script');
       el.src = src;
       el.onload = resolve;
-      el.onerror = reject;
+      el.onerror = (e) => {
+        delete scripts[src];
+        reject(e);
+      };
       document.head.appendChild(el);
-    });
+    }));
   }
 
   // The map (d3 + topojson + map data) is only loaded when the map page is opened.
@@ -2024,10 +2031,133 @@
     draw();
   }
 
+  // ---------- daily quiz ----------
+
+  const ARROWS = ['⬆️', '↗️', '➡️', '↘️', '⬇️', '↙️', '⬅️', '↖️'];
+  const arrowFor = (deg) => ARROWS[Math.round(deg / 45) % 8];
+  const DIRS = { nl: ['noord', 'noordoost', 'oost', 'zuidoost', 'zuid', 'zuidwest', 'west', 'noordwest'], en: ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'] };
+
+  async function renderQuiz(main) {
+    main.innerHTML = `
+      <div class="page-head"><div><h2>🧩 ${t('quizTitle')} <small class="muted" id="quiz-no"></small></h2><p class="sub">${t('quizSub')}</p></div></div>
+      <div class="quiz" id="quiz"><div class="quiz-shape card skeleton"></div></div>`;
+    let data;
+    try {
+      [data] = await Promise.all([api('GET', '/api/quiz'), window.d3 ? null : loadScript('/vendor/d3.min.js')]);
+    } catch (e) {
+      document.getElementById('quiz').innerHTML = `<div class="empty">${errText(e)}</div>`;
+      return;
+    }
+    if (currentView() !== 'quiz') return;
+    drawQuiz(data);
+  }
+
+  function quizShape(shape) {
+    const W = 320;
+    const H = 240;
+    const f = fixWinding({ type: 'Feature', geometry: shape });
+    const c = d3.geoCentroid(f);
+    // Turn the globe so the country sits in the middle (no split at the date line).
+    const projection = d3.geoMercator().rotate([-c[0], 0]).fitExtent([[12, 12], [W - 12, H - 12]], f);
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('quizShapeLabel'))}"><path d="${d3.geoPath(projection)(f)}"/></svg>`;
+  }
+
+  function drawQuiz(data) {
+    const box = document.getElementById('quiz');
+    document.getElementById('quiz-no').textContent = '#' + data.number;
+    const guessed = new Set(data.guesses.map((g) => g.code));
+    const row = (g) => {
+      const c = L.BY_CODE[g.code];
+      if (g.correct) return `<li class="q-row ok">${flag(g.code, 'sm')}<b>${cname(c)}</b><span>🎉</span><span></span><span class="q-pct">100%</span></li>`;
+      const dir = Math.round(g.bearing / 45) % 8;
+      return `<li class="q-row" style="--pct:${g.pct}%">${flag(g.code, 'sm')}<b>${cname(c)}</b><span>${num(g.km)} km</span>
+        <span class="q-arrow" title="${DIRS[state.lang][dir]}" aria-label="${DIRS[state.lang][dir]}">${arrowFor(g.bearing)}</span><span class="q-pct">${g.pct}%</span></li>`;
+    };
+    const empty = Array.from({ length: data.max - data.guesses.length }, () => '<li class="q-row empty"></li>').join('');
+    let end = '';
+    if (data.done) {
+      const a = L.BY_CODE[data.answer];
+      end = data.solved
+        ? `<div class="q-end win">🎉 ${t('quizWin', { country: cname(a), n: data.guesses.length })} <span class="pill bonus-pill">🧩 +${data.xp} ${t('quizXp')}</span></div>`
+        : `<div class="q-end">😅 ${t('quizLose', { country: cname(a) })}</div>`;
+      end += `<p class="hint">${t('quizTomorrow')} · <a class="linkish" href="#/ranking">${t('quizScoreboard')} →</a> · <button class="linkish" data-open="${a.code}">${flag(a.code, 'sm')} ${cname(a)}</button></p>`;
+    }
+    const options = L.COUNTRIES.filter((c) => !guessed.has(c.code))
+      .map((c) => cname(c))
+      .sort((a, b) => a.localeCompare(b))
+      .map((n) => `<option value="${esc(n)}"></option>`)
+      .join('');
+    box.innerHTML = `
+      <div class="quiz-shape card">${quizShape(data.shape)}</div>
+      <div class="quiz-play">
+        <ol class="q-rows">${data.guesses.map(row).join('')}${empty}</ol>
+        ${
+          data.done
+            ? end
+            : `<form class="q-form" id="q-form" autocomplete="off">
+                <input name="guess" list="q-list" placeholder="${t('quizPlaceholder')}" aria-label="${t('quizPlaceholder')}" required>
+                <datalist id="q-list">${options}</datalist>
+                <button class="btn primary" type="submit">${t('quizGuess')}</button>
+              </form>
+              <div class="error" id="q-error"></div>
+              <p class="hint">${t('quizHow', { left: data.max - data.guesses.length })}</p>`
+        }
+      </div>`;
+    box.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openCountry(b.dataset.open)));
+    const form = document.getElementById('q-form');
+    if (!form) return;
+    const input = form.querySelector('input');
+    input.focus();
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = input.value.trim().toLowerCase();
+      // Names in both languages are accepted.
+      const c = L.COUNTRIES.find((x) => x.nl.toLowerCase() === name || x.en.toLowerCase() === name);
+      const err = document.getElementById('q-error');
+      if (!c) return (err.textContent = t('quizPick'));
+      if (guessed.has(c.code)) return (err.textContent = t('quizAlready'));
+      form.querySelector('button').disabled = true;
+      try {
+        const next = await api('POST', '/api/quiz/guess', { code: c.code });
+        drawQuiz(next);
+        if (next.solved) toast(`🧩 +${next.xp} ${t('quizXp')}`, 'xp');
+      } catch (e) {
+        err.textContent = errText(e);
+        form.querySelector('button').disabled = false;
+      }
+    };
+  }
+
+  // Quiz scoreboard under the leaderboard.
+  async function quizBoard(el) {
+    let scores;
+    try {
+      scores = (await api('GET', '/api/quiz/scores')).scores;
+    } catch (e) {
+      return;
+    }
+    if (currentView() !== 'ranking') return;
+    el.innerHTML = `<h3 class="section-title">🧩 ${t('quizScoreboard')}</h3>
+      <div class="card table-wrap"><table class="q-table">
+        <thead><tr><th>${t('quizWho')}</th><th title="${t('quizStreakTip')}">🔥 ${t('quizStreak')}</th><th>${t('quizWon')}</th><th>${t('quizAvg')}</th><th>${t('quizXp')}</th></tr></thead>
+        <tbody>${scores
+          .map(
+            (s) => `<tr class="${s.id === state.me.id ? 'me' : ''}">
+              <td><span class="q-who"><span class="avatar xs" style="background:${esc(s.color)}" title="${esc(s.name)}" aria-label="${esc(s.name)}">${esc(initials(s.name))}</span> ${esc(s.name)}${s.today ? ' ✅' : ''}</span></td>
+              <td><b>${s.streak}</b>${s.bestStreak > s.streak ? ` <small class="muted">(${t('quizBest')} ${s.bestStreak})</small>` : ''}</td>
+              <td>${s.won}/${s.played}</td>
+              <td>${s.avgGuesses == null ? '–' : String(s.avgGuesses).replace('.', state.lang === 'nl' ? ',' : '.')}</td>
+              <td>${num(s.xp)}</td></tr>`
+          )
+          .join('')}</tbody></table></div>
+      <p class="hint">✅ = ${t('quizPlayedToday')} · <a class="linkish" href="#/quiz">${t('quizPlay')} →</a></p>`;
+  }
+
   // ---------- leaderboard ----------
 
   async function renderRanking(main) {
-    main.innerHTML = `<h2>${t('rankingTitle')}</h2><p class="sub">&nbsp;</p><div id="lb"></div>`;
+    main.innerHTML = `<h2>${t('rankingTitle')}</h2><p class="sub">&nbsp;</p><div id="lb"></div><div id="quiz-board"></div>`;
+    quizBoard(main.querySelector('#quiz-board'));
     let board;
     try {
       board = (await api('GET', '/api/leaderboard')).board;

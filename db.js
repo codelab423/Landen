@@ -66,6 +66,15 @@ const SCHEMA_SQLITE = `
     code TEXT,
     amount INTEGER,
     won_at TEXT NOT NULL
+  );  CREATE TABLE IF NOT EXISTS quiz_plays (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    guesses TEXT NOT NULL DEFAULT '[]',
+    solved INTEGER NOT NULL DEFAULT 0,
+    done INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, day)
   );
 `;
 
@@ -125,6 +134,15 @@ const SCHEMA_PG = `
     code TEXT,
     amount INTEGER,
     won_at TEXT NOT NULL
+  );  CREATE TABLE IF NOT EXISTS quiz_plays (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    guesses TEXT NOT NULL DEFAULT '[]',
+    solved INTEGER NOT NULL DEFAULT 0,
+    done INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, day)
   );
 `;
 

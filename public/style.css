@@ -2342,3 +2342,30 @@ h3 {
 .ch-standings .spacer { flex: 1; }
 .ch-last { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; }
 .lb-row .bonus-pill { margin-top: 4px; }
+
+/* ---------- Daily quiz ---------- */
+.quiz { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.quiz-shape { display: flex; align-items: center; justify-content: center; min-height: 240px; padding: 12px; }
+.quiz-shape svg { width: 100%; max-height: 320px; }
+.quiz-shape path { fill: #2dd4bf; stroke: #0f766e; stroke-width: 1; }
+.q-rows { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.q-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto 3.2em; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.25); background: linear-gradient(90deg, rgba(45,212,191,.18) var(--pct, 0%), transparent var(--pct, 0%)); }
+.q-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-row.empty { border-style: dashed; background: transparent; }
+.q-row.ok { border-color: #22c55e; background: rgba(34,197,94,.18); }
+.q-pct { text-align: right; font-weight: 700; }
+.q-arrow { font-size: 1.1rem; }
+.q-form { display: flex; gap: 8px; }
+.q-form input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(148,163,184,.35); background: transparent; color: inherit; font: inherit; }
+.q-end { padding: 12px; border-radius: 12px; border: 1px solid rgba(148,163,184,.3); font-weight: 600; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.q-end.win { border-color: #22c55e; background: rgba(34,197,94,.12); }
+.section-title { margin: 24px 0 8px; }
+.table-wrap { overflow-x: auto; padding: 0; }
+.q-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.q-table th, .q-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid rgba(148,163,184,.15); white-space: nowrap; }
+.q-table th { color: var(--muted); font-weight: 600; font-size: .8rem; }
+.q-table tr.me td { background: rgba(45,212,191,.08); }
+@media (max-width: 760px) { .quiz { grid-template-columns: minmax(0, 1fr); } .quiz-shape { min-height: 180px; } }
+.q-who { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 520px) { .q-table { font-size: .8rem; } .q-table th, .q-table td { padding: 7px 6px; } .q-table th { font-size: .7rem; } }
