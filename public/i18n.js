@@ -1,5 +1,13 @@
 window.I18N = {
   nl: {
+    allYear: 'het hele jaar',
+    climateIn: 'Klimaat in {city}',
+    bestTime: 'Beste tijd',
+    bestMonth: 'Beste maand om te gaan',
+    tempLegend: 'temperatuur',
+    rainLegend: 'neerslag',
+    climateNote: 'indicatieve gemiddelden',
+    goodNow: 'nu goed weer!',
     deleteTitle: "{name} verwijderen?",
     deleteText: "Weet je het zeker? Het account van {name} wordt verwijderd, samen met alle {n} landen, de wensenlijst, ideeën, stemmen en plannen. Dit kun je niet ongedaan maken.",
     deleteConfirm: "Ja, verwijder {name}",
@@ -266,6 +274,14 @@ window.I18N = {
     err_generic: 'Er ging iets mis. Probeer het opnieuw.',
   },
   en: {
+    allYear: 'all year',
+    climateIn: 'Climate in {city}',
+    bestTime: 'Best time',
+    bestMonth: 'Best month to go',
+    tempLegend: 'temperature',
+    rainLegend: 'rainfall',
+    climateNote: 'indicative averages',
+    goodNow: 'good weather now!',
     deleteTitle: "Delete {name}?",
     deleteText: "Are you sure? {name}'s account will be deleted, together with all {n} countries, the wishlist, ideas, votes and plans. This can't be undone.",
     deleteConfirm: "Yes, delete {name}",
